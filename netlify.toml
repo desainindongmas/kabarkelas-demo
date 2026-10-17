@@ -1,0 +1,34 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "24"
+  AWS_LAMBDA_JS_RUNTIME = "nodejs24.x"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["express", "serverless-http", "@netlify/blobs", "jspdf", "jszip"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "private, no-store"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
