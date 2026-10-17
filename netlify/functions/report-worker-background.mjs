@@ -1,8 +1,10 @@
-import { connectLambda, getStore } from '@netlify/blobs';
+import { getStore } from '@netlify/blobs';
 import { handleReportWorker } from '../lib/runtime.mjs';
+import { toLambdaEvent,toResponse,unavailable } from '../lib/http.mjs';
 
-export async function handler(event){
-  connectLambda(event);
-  const store=getStore({name:'kabarkelas-demo-v1',consistency:'strong'});
-  return handleReportWorker(event,{store});
+export default async function reportWorker(request,context){
+  try{
+    const store=getStore({name:'kabarkelas-demo-v1',consistency:'strong'});
+    return toResponse(await handleReportWorker(await toLambdaEvent(request,context),{store}));
+  }catch(error){return unavailable(error,context);}
 }

@@ -15,7 +15,7 @@ Setelah deploy, buka alamat situs Netlify dan periksa:
 
 ## Cara backend bekerja
 
-`app.mjs` berisi API yang sama untuk server lokal dan Netlify. `server.mjs` menjalankannya dengan Express/Vite lokal. `netlify/functions/api.mjs` membungkusnya dengan `serverless-http`; setiap eksekusi membuka database kerja sendiri di `/tmp`, memulihkan snapshot dari Blobs, dan menyimpan perubahan dengan kondisi ETag.
+`app.mjs` berisi API yang sama untuk server lokal dan Netlify. `server.mjs` menjalankannya dengan Express/Vite lokal. Kedua Functions menggunakan Web Request API Netlify (default export, runtime API v2) agar konfigurasi Blobs yang disediakan platform tetap utuh, termasuk endpoint untuk pembacaan konsisten. Adapter HTTP meneruskan permintaan ke `serverless-http` dan mempertahankan beberapa header Set-Cookie serta respons ZIP biner. Setiap eksekusi membuka database kerja sendiri di `/tmp`, memulihkan snapshot dari Blobs, dan menyimpan perubahan dengan kondisi ETag.
 
 Data Netlify terpisah untuk setiap cookie pengunjung agar demo publik tidak saling mengubah data. Antrean dan arsip rapor disimpan di Blobs. Background Function memproses PDF dan mencatat progres, sehingga tidak bergantung pada proses Express yang hidup terus-menerus. Antrean yang gagal dipanggil ditandai gagal agar dapat dicoba lagi. Cookie dibatasi ke HTTPS; uji situs melalui URL HTTPS Netlify.
 
@@ -25,6 +25,6 @@ Ini tetap demo berisi identitas fiktif dan pemilihan role terbuka. Transaksi pem
 
 ## Bukti verifikasi sebelum push
 
-Build frontend dan pengujian lokal mencakup alur aplikasi, izin peran, ekspor, serta penyimpanan. Pengujian adapter Netlify menggunakan SDK dan server emulator resmi Netlify Blobs, bukan database demo utama: pemulihan antar-eksekusi, cookie, isolasi pengunjung, konflik ETag, worker PDF, unduhan ZIP, dan kegagalan dispatch yang dapat dicoba lagi. Kedua Functions juga dibundel menggunakan `@netlify/zip-it-and-ship-it`, bundler yang dipakai Netlify, untuk runtime `nodejs24.x`.
+Build frontend dan pengujian lokal mencakup alur aplikasi, izin peran, ekspor, serta penyimpanan. Pengujian adapter Netlify menggunakan SDK dan server emulator resmi Netlify Blobs, bukan database demo utama: pemulihan antar-eksekusi, cookie, isolasi pengunjung, konflik ETag, worker PDF, unduhan ZIP, dan kegagalan dispatch yang dapat dicoba lagi. Tes `tests/functions.test.mjs` memanggil default export kedua Functions dengan Web Request dan konfigurasi Blobs terinjeksi, termasuk regresi adapter Lambda lama yang menghilangkan `uncachedEdgeURL`. Kedua Functions juga dibundel menggunakan `@netlify/zip-it-and-ship-it`, bundler yang dipakai Netlify, untuk runtime `nodejs24.x`.
 
 Push GitHub bukan bukti deploy Netlify sudah berhasil. URL publik, izin Blobs akun, dan pemanggilan Background Function di infrastruktur Netlify perlu diperiksa pada deploy pertama.
