@@ -1,23 +1,1843 @@
-import { useState } from 'react';
-import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, Bell, BookOpen, Building2, Check, CheckCircle2, ChevronRight, Cloud, CreditCard, Download, ExternalLink, FileSpreadsheet, GraduationCap, HardDrive, History, Layers, Link, LoaderCircle, LockKeyhole, Mail, MessageSquare, MoreHorizontal, Network, Palette, Pencil, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, Sparkles, Trash2, TrendingUp, Upload, Users, Wallet, X, Zap } from 'lucide-react';
-import { avg, canEdit, currency, date, number, roleNames, useApp, type Row } from './model';
-import { Avatar,Badge,Button,ClassSelect,Empty,ExportButton,FormModal,Metric,Modal,PageHead,Pagination,Panel,SearchBox,tone,type Field } from './ui';
-import { exportExcel,downloadJSON,receiptPDF } from './export';
-import { api } from './App';
+import { useState } from "react";
+import {
+  Activity,
+  ArrowDownToLine,
+  ArrowRight,
+  ArrowUpRight,
+  Bell,
+  BookOpen,
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Cloud,
+  CreditCard,
+  Download,
+  ExternalLink,
+  FileSpreadsheet,
+  GraduationCap,
+  HardDrive,
+  History,
+  Layers,
+  Link,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  MessageSquare,
+  MoreHorizontal,
+  Network,
+  Palette,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  TrendingUp,
+  Upload,
+  Users,
+  Wallet,
+  X,
+  Zap,
+} from "lucide-react";
+import {
+  avg,
+  canEdit,
+  currency,
+  date,
+  number,
+  roleNames,
+  useApp,
+  type Row,
+} from "./model";
+import {
+  Avatar,
+  Badge,
+  Button,
+  ClassSelect,
+  Empty,
+  ExportButton,
+  FormModal,
+  Metric,
+  Modal,
+  PageHead,
+  Pagination,
+  Panel,
+  SearchBox,
+  tone,
+  type Field,
+} from "./ui";
+import { exportExcel, downloadJSON, receiptPDF } from "./export";
+import { api } from "./App";
 
-export function MasterData(){const {data,user,save,remove,go,toast}=useApp();const [tab,setTab]=useState('teachers'),[query,setQuery]=useState(''),[page,setPage]=useState(1),[form,setForm]=useState<Partial<Row>|null>(null),[del,setDel]=useState<Row|undefined>(),[imp,setImp]=useState(false);const tabs=[{id:'teachers',name:'Guru & staf',icon:Users},{id:'classes',name:'Kelas',icon:Building2},{id:'subjects',name:'Mata pelajaran',icon:BookOpen},{id:'students',name:'Data siswa',icon:GraduationCap}];const fields:Record<string,Field[]>={teachers:[{key:'name',label:'Nama lengkap',required:true},{key:'nip',label:'NIP',required:true},{key:'subject',label:'Mata pelajaran',required:true,options:data.subjects.map(s=>({value:s.name,label:s.name}))},{key:'gender',label:'Jenis kelamin',options:[{value:'P',label:'Perempuan'},{value:'L',label:'Laki-laki'}],required:true},{key:'email',label:'Email',type:'email',required:true},{key:'phone',label:'Telepon',type:'tel',required:true}],classes:[{key:'name',label:'Nama kelas',required:true},{key:'homeroom',label:'Wali kelas',required:true,options:data.teachers.map(t=>({value:t.name,label:t.name}))},{key:'room',label:'Ruang kelas',required:true},{key:'capacity',label:'Kapasitas',type:'number',min:1,max:60,required:true}],subjects:[{key:'name',label:'Nama mata pelajaran',required:true},{key:'code',label:'Kode',required:true},{key:'kkm',label:'KKM',type:'number',min:0,max:100,required:true},{key:'teacher',label:'Guru pengampu',required:true,options:data.teachers.map(t=>({value:t.name,label:t.name}))}],students:[{key:'name',label:'Nama lengkap',required:true},{key:'nisn',label:'NISN 10 digit',required:true},{key:'classId',label:'Kelas',required:true,options:data.classes.map(c=>({value:c.id,label:c.name}))},{key:'gender',label:'Jenis kelamin',required:true,options:[{value:'P',label:'Perempuan'},{value:'L',label:'Laki-laki'}]},{key:'birth',label:'Tanggal lahir',type:'date',required:true},{key:'parent',label:'Orang tua / wali',required:true},{key:'phone',label:'Telepon',required:true,type:'tel'},{key:'address',label:'Alamat',required:true}]};const rows=data[tab].filter(r=>r.name.toLowerCase().includes(query.toLowerCase()));const editable=user.role==='admin';return <><PageHead eyebrow="FONDASI SEKOLAH YANG TERHUBUNG" title="Data sekolah" description="Kelola guru, kelas, mata pelajaran, dan identitas siswa di satu tempat." action={editable?<><Button variant="secondary" onClick={()=>setImp(true)}><Upload size={16}/>Impor Excel</Button><Button onClick={()=>setForm({})}><Plus size={16}/>Tambah data</Button></>:undefined}/><div className="tabs">{tabs.map(t=><button key={t.id} className={tab===t.id?'active':''} onClick={()=>{setTab(t.id);setPage(1);setQuery('');}}><t.icon size={16}/>{t.name}<span>{data[t.id].length}</span></button>)}</div><Panel title={tabs.find(t=>t.id===tab)?.name} action={<ExportButton onClick={()=>exportExcel(rows.map(r=>Object.fromEntries(Object.entries(r).filter(([k,v])=>!['id','photo','history'].includes(k)&&typeof v!=='object'))),'Data-'+tab)}/>}><div className="table-toolbar"><SearchBox value={query} onChange={v=>{setQuery(v);setPage(1);}} placeholder="Cari data…"/><span className="muted">{rows.length} data terdaftar</span></div><div className="table-scroll"><table><thead><tr><th>Nama</th><th>{tab==='teachers'?'NIP':tab==='classes'?'Wali kelas':tab==='students'?'NISN':'Kode'}</th><th>{tab==='teachers'?'Mata pelajaran':tab==='classes'?'Siswa / kapasitas':tab==='students'?'Kelas':'KKM'}</th><th>Status</th><th/></tr></thead><tbody>{rows.slice((page-1)*12,page*12).map(r=><tr key={r.id}><td><div className="person">{['teachers','students'].includes(tab)?<Avatar photo={r.photo} size={38}/>:<span className="heading-icon teal">{tab==='classes'?<Building2 size={18}/>:<BookOpen size={18}/>}</span>}<div><strong>{r.name}</strong>{tab==='teachers'&&<small>{r.email}</small>}</div></div></td><td>{r.nip||r.homeroom||r.nisn||r.code}</td><td>{tab==='classes'?`${data.students.filter(s=>s.classId===r.id).length} / ${r.capacity}`:r.subject||data.classes.find(c=>c.id===r.classId)?.name||r.kkm}</td><td><Badge tone="green">Aktif</Badge></td><td><div className="row-actions">{tab==='students'&&<button className="icon-btn" aria-label={`Profil ${r.name}`} onClick={()=>go('students',r.id)}><ArrowUpRight size={17}/></button>}{editable&&<><button className="icon-btn" aria-label={`Edit ${r.name}`} onClick={()=>setForm(r)}><Pencil size={16}/></button><button className="icon-btn text-red" aria-label={`Hapus ${r.name}`} onClick={()=>setDel(r)}><Trash2 size={16}/></button></>}</div></td></tr>)}</tbody></table></div>{!rows.length&&<Empty/>}<Pagination total={rows.length} page={page} onChange={setPage}/></Panel>{form&&<FormModal title={`${form.id?'Edit':'Tambah'} ${tabs.find(t=>t.id===tab)?.name.toLowerCase()}`} initial={form} fields={fields[tab]} onClose={()=>setForm(null)} onSave={v=>save(tab,{...(tab==='students'?{attendance:100,history:[80,80,80,80,80,80],overdue:0,status:'Aktif'}:{}),...v,...(['teachers','students'].includes(tab)?{photo:v.gender==='L'?tab==='teachers'?7:0:tab==='teachers'?6:1}:{})})}/>} {del&&<Modal title="Hapus data ini?" subtitle={del.name} onClose={()=>setDel(undefined)}><div className="modal-copy"><p>Data yang telah dihapus tidak dapat dikembalikan melalui halaman ini. Kelas berisi siswa harus dikosongkan terlebih dahulu.</p></div><footer><Button variant="secondary" onClick={()=>setDel(undefined)}>Batal</Button><Button variant="danger" onClick={async()=>{try{await remove(tab,del.id);setDel(undefined);}catch(e){toast((e as Error).message,true);}}}>Hapus data</Button></footer></Modal>}{imp&&<ImportWizard onClose={()=>setImp(false)}/>}</>;}
-function ImportWizard({onClose}:{onClose:()=>void}){const {data,user,reload,toast}=useApp();const [rows,setRows]=useState<Record<string,any>[]>([]),[headers,setHeaders]=useState<string[]>([]),[mapping,setMapping]=useState<Record<string,string>>({}),[step,setStep]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState(''),[history,setHistory]=useState<Row[]>([]);const keys=[['name','Nama lengkap'],['nisn','NISN'],['class','Kelas'],['gender','Jenis kelamin'],['parent','Orang tua'],['phone','Telepon']];const mapped: any[]=rows.map((r,i)=>{const v=Object.fromEntries(keys.map(([key])=>[key,String(r[mapping[key]]??'').trim()]));const c=data.classes.find(c=>c.name.toLowerCase()===v.class.toLowerCase());const errors=[];if(!v.name)errors.push('Nama kosong');if(!/^\d{10}$/.test(v.nisn))errors.push('NISN harus 10 digit');if(data.students.some(s=>s.nisn===v.nisn)||rows.slice(0,i).some(p=>String(p[mapping.nisn])===v.nisn))errors.push('NISN duplikat');if(!c)errors.push('Kelas tidak ditemukan');if(!['L','P','Laki-laki','Perempuan'].includes(v.gender))errors.push('Gender harus L/P');return {...v,classId:c?.id,gender:['P','Perempuan'].includes(v.gender)?'P':'L',errors};});return <Modal title="Impor siswa dari Excel / Dapodik" subtitle="Unggah → petakan kolom → validasi → impor. Tidak ada data yang ditimpa." onClose={onClose} wide><div className="import-body"><div className="stepper">{['Unggah berkas','Pemetaan kolom','Validasi & impor'].map((s,i)=><div className={step>=i+1?'active':''} key={s}><span>{step>i+1?<Check size={14}/>:i+1}</span>{s}</div>)}</div>{step===1&&<><label className="upload-zone large"><FileSpreadsheet size={36}/><strong>Pilih berkas Excel atau CSV</strong><span>Format .xlsx, .xls, .csv · maksimal 5 MB · 2.000 siswa</span><input type="file" accept=".xlsx,.xls,.csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;setError('');if(file.size>5*1024*1024){setError('Ukuran berkas maksimal 5 MB');return;}try{const XLSX=await import('xlsx');const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});const rs=XLSX.utils.sheet_to_json<Record<string,any>>(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});if(!rs.length||rs.length>2000)throw new Error('Berkas harus berisi 1–2.000 siswa.');const hs=Object.keys(rs[0]);setHeaders(hs);setRows(rs);const saved=JSON.parse(localStorage.getItem(`kk-mapping-${user.school}`)||'{}');const aliases:Record<string,string[]>={name:['nama','nama lengkap','nama siswa'],nisn:['nisn'],class:['kelas','rombel'],gender:['jk','gender','jenis kelamin'],parent:['orang tua','nama orang tua','wali'],phone:['telepon','hp','no hp']};setMapping(Object.fromEntries(keys.map(([k])=>[k,hs.includes(saved[k])?saved[k]:hs.find(h=>aliases[k].includes(h.toLowerCase()))||''])));setStep(2);}catch(e){setError((e as Error).message);}}}/></label><Button variant="secondary" onClick={()=>exportExcel([{Nama:'Anisa Putri',NISN:'0012345678',Kelas:data.classes[0]?.name,JK:'P','Orang Tua':'Ibu Rina',Telepon:'081234567890'}],'Template-Impor-Siswa')}><Download size={16}/>Unduh template contoh</Button><Button variant="ghost" onClick={async()=>{try{setHistory(await api('/api/imports'));}catch(e){setError((e as Error).message);}}}><History size={16}/>Riwayat impor & rollback</Button>{history.map(h=><div className="import-history" key={h.id}><div><strong>{h.count} siswa</strong><small>{date(h.date)} · {h.status}</small></div>{h.status==='Selesai'&&<Button variant="secondary" onClick={async()=>{try{await api(`/api/imports/${h.id}/rollback`,{});setHistory(await api('/api/imports'));await reload();toast('Impor dibatalkan. Data yang telah mendapat aktivitas baru dipertahankan.');}catch(e){setError((e as Error).message);}}}>Rollback impor</Button>}</div>)}</>}{step===2&&<><p className="card-copy">Ditemukan {rows.length} baris. Cocokkan kolom berkas dengan data KabarKelas.</p><div className="form-grid">{keys.map(([k,label])=><label key={k}>{label}{['name','nisn','class','gender'].includes(k)&&' *'}<select value={mapping[k]||''} onChange={e=>setMapping({...mapping,[k]:e.target.value})}><option value="">Tidak dipetakan</option>{headers.map(h=><option key={h}>{h}</option>)}</select></label>)}</div><footer><Button variant="secondary" onClick={()=>setStep(1)}>Kembali</Button><Button disabled={!['name','nisn','class','gender'].every(k=>mapping[k])} onClick={()=>{localStorage.setItem(`kk-mapping-${user.school}`,JSON.stringify(mapping));setStep(3);}}>Validasi data <ArrowRight size={15}/></Button></footer></>}{step===3&&<><div className={`callout ${mapped.some(r=>r.errors.length)?'amber':'green'}`}><CheckCircle2 size={20}/><span>{mapped.filter(r=>!r.errors.length).length} data valid · {mapped.filter(r=>r.errors.length).length} data perlu diperbaiki. Perbaiki berkas bila ditemukan kesalahan.</span></div><div className="table-scroll import-preview"><table><thead><tr><th>Nama</th><th>NISN</th><th>Kelas</th><th>Validasi</th></tr></thead><tbody>{mapped.slice(0,30).map((r,i)=><tr key={i}><td>{r.name}</td><td>{r.nisn}</td><td>{r.class}</td><td>{r.errors.length?<span className="text-red">{r.errors.join(', ')}</span>:<Badge tone="green">Valid</Badge>}</td></tr>)}</tbody></table></div><small className="muted">Pratinjau maksimal 30 baris. Semua {mapped.length} baris telah divalidasi.</small><footer><Button variant="secondary" onClick={()=>setStep(2)}>Ubah pemetaan</Button><Button disabled={busy||mapped.some(r=>r.errors.length)} onClick={async()=>{setBusy(true);setError('');try{await api('/api/import-students',{rows:mapped.map(({errors,...r})=>r)});await reload();toast(`${mapped.length} siswa berhasil diimpor`);onClose();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>{busy?<LoaderCircle size={16} className="spin"/>:<Upload size={16}/>}Impor {mapped.length} siswa</Button></footer></>}{error&&<div className="form-error">{error}</div>}</div></Modal>;}
+export function MasterData() {
+  const { data, user, save, remove, go, toast } = useApp();
+  const [tab, setTab] = useState("teachers"),
+    [query, setQuery] = useState(""),
+    [page, setPage] = useState(1),
+    [form, setForm] = useState<Partial<Row> | null>(null),
+    [del, setDel] = useState<Row | undefined>(),
+    [imp, setImp] = useState(false);
+  const tabs = [
+    { id: "teachers", name: "Guru & staf", icon: Users },
+    { id: "classes", name: "Kelas", icon: Building2 },
+    { id: "subjects", name: "Mata pelajaran", icon: BookOpen },
+    { id: "students", name: "Data siswa", icon: GraduationCap },
+  ];
+  const fields: Record<string, Field[]> = {
+    teachers: [
+      { key: "name", label: "Nama lengkap", required: true },
+      { key: "nip", label: "NIP", required: true },
+      {
+        key: "subject",
+        label: "Mata pelajaran",
+        required: true,
+        options: data.subjects.map((s) => ({ value: s.name, label: s.name })),
+      },
+      {
+        key: "gender",
+        label: "Jenis kelamin",
+        options: [
+          { value: "P", label: "Perempuan" },
+          { value: "L", label: "Laki-laki" },
+        ],
+        required: true,
+      },
+      { key: "email", label: "Email", type: "email", required: true },
+      { key: "phone", label: "Telepon", type: "tel", required: true },
+    ],
+    classes: [
+      { key: "name", label: "Nama kelas", required: true },
+      {
+        key: "homeroom",
+        label: "Wali kelas",
+        required: true,
+        options: data.teachers.map((t) => ({ value: t.name, label: t.name })),
+      },
+      { key: "room", label: "Ruang kelas", required: true },
+      {
+        key: "capacity",
+        label: "Kapasitas",
+        type: "number",
+        min: 1,
+        max: 60,
+        required: true,
+      },
+    ],
+    subjects: [
+      { key: "name", label: "Nama mata pelajaran", required: true },
+      { key: "code", label: "Kode", required: true },
+      {
+        key: "kkm",
+        label: "KKM",
+        type: "number",
+        min: 0,
+        max: 100,
+        required: true,
+      },
+      {
+        key: "teacher",
+        label: "Guru pengampu",
+        required: true,
+        options: data.teachers.map((t) => ({ value: t.name, label: t.name })),
+      },
+    ],
+    students: [
+      { key: "name", label: "Nama lengkap", required: true },
+      { key: "nisn", label: "NISN 10 digit", required: true },
+      {
+        key: "classId",
+        label: "Kelas",
+        required: true,
+        options: data.classes.map((c) => ({ value: c.id, label: c.name })),
+      },
+      {
+        key: "gender",
+        label: "Jenis kelamin",
+        required: true,
+        options: [
+          { value: "P", label: "Perempuan" },
+          { value: "L", label: "Laki-laki" },
+        ],
+      },
+      { key: "birth", label: "Tanggal lahir", type: "date", required: true },
+      { key: "parent", label: "Orang tua / wali", required: true },
+      { key: "phone", label: "Telepon", required: true, type: "tel" },
+      { key: "address", label: "Alamat", required: true },
+    ],
+  };
+  const rows = data[tab].filter((r) =>
+    r.name.toLowerCase().includes(query.toLowerCase()),
+  );
+  const editable = user.role === "admin";
+  return (
+    <>
+      <PageHead
+        eyebrow="FONDASI SEKOLAH YANG TERHUBUNG"
+        title="Data sekolah"
+        description="Kelola guru, kelas, mata pelajaran, dan identitas siswa di satu tempat."
+        action={
+          editable ? (
+            <>
+              <Button variant="secondary" onClick={() => setImp(true)}>
+                <Upload size={16} />
+                Impor Excel
+              </Button>
+              <Button onClick={() => setForm({})}>
+                <Plus size={16} />
+                Tambah data
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+      <div className="tabs">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            className={tab === t.id ? "active" : ""}
+            onClick={() => {
+              setTab(t.id);
+              setPage(1);
+              setQuery("");
+            }}
+          >
+            <t.icon size={16} />
+            {t.name}
+            <span>{data[t.id].length}</span>
+          </button>
+        ))}
+      </div>
+      <Panel
+        title={tabs.find((t) => t.id === tab)?.name}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportExcel(
+                rows.map((r) =>
+                  Object.fromEntries(
+                    Object.entries(r).filter(
+                      ([k, v]) =>
+                        !["id", "photo", "history"].includes(k) &&
+                        typeof v !== "object",
+                    ),
+                  ),
+                ),
+                "Data-" + tab,
+              )
+            }
+          />
+        }
+      >
+        <div className="table-toolbar">
+          <SearchBox
+            value={query}
+            onChange={(v) => {
+              setQuery(v);
+              setPage(1);
+            }}
+            placeholder="Cari data…"
+          />
+          <span className="muted">{rows.length} data terdaftar</span>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>
+                  {tab === "teachers"
+                    ? "NIP"
+                    : tab === "classes"
+                      ? "Wali kelas"
+                      : tab === "students"
+                        ? "NISN"
+                        : "Kode"}
+                </th>
+                <th>
+                  {tab === "teachers"
+                    ? "Mata pelajaran"
+                    : tab === "classes"
+                      ? "Siswa / kapasitas"
+                      : tab === "students"
+                        ? "Kelas"
+                        : "KKM"}
+                </th>
+                <th>Status</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice((page - 1) * 12, page * 12).map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <div className="person">
+                      {["teachers", "students"].includes(tab) ? (
+                        <Avatar photo={r.photo} size={38} />
+                      ) : (
+                        <span className="heading-icon teal">
+                          {tab === "classes" ? (
+                            <Building2 size={18} />
+                          ) : (
+                            <BookOpen size={18} />
+                          )}
+                        </span>
+                      )}
+                      <div>
+                        <strong>{r.name}</strong>
+                        {tab === "teachers" && <small>{r.email}</small>}
+                      </div>
+                    </div>
+                  </td>
+                  <td>{r.nip || r.homeroom || r.nisn || r.code}</td>
+                  <td>
+                    {tab === "classes"
+                      ? `${data.students.filter((s) => s.classId === r.id).length} / ${r.capacity}`
+                      : r.subject ||
+                        data.classes.find((c) => c.id === r.classId)?.name ||
+                        r.kkm}
+                  </td>
+                  <td>
+                    <Badge tone="green">Aktif</Badge>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      {tab === "students" && (
+                        <button
+                          className="icon-btn"
+                          aria-label={`Profil ${r.name}`}
+                          onClick={() => go("students", r.id)}
+                        >
+                          <ArrowUpRight size={17} />
+                        </button>
+                      )}
+                      {editable && (
+                        <>
+                          <button
+                            className="icon-btn"
+                            aria-label={`Edit ${r.name}`}
+                            onClick={() => setForm(r)}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            className="icon-btn text-red"
+                            aria-label={`Hapus ${r.name}`}
+                            onClick={() => setDel(r)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!rows.length && <Empty />}
+        <Pagination total={rows.length} page={page} onChange={setPage} />
+      </Panel>
+      {form && (
+        <FormModal
+          title={`${form.id ? "Edit" : "Tambah"} ${tabs.find((t) => t.id === tab)?.name.toLowerCase()}`}
+          initial={form}
+          fields={fields[tab]}
+          onClose={() => setForm(null)}
+          onSave={(v) =>
+            save(tab, {
+              ...(tab === "students"
+                ? {
+                    attendance: 100,
+                    history: [80, 80, 80, 80, 80, 80],
+                    overdue: 0,
+                    status: "Aktif",
+                  }
+                : {}),
+              ...v,
+              ...(["teachers", "students"].includes(tab)
+                ? {
+                    photo:
+                      v.gender === "L"
+                        ? tab === "teachers"
+                          ? 7
+                          : 0
+                        : tab === "teachers"
+                          ? 6
+                          : 1,
+                  }
+                : {}),
+            })
+          }
+        />
+      )}{" "}
+      {del && (
+        <Modal
+          title="Hapus data ini?"
+          subtitle={del.name}
+          onClose={() => setDel(undefined)}
+        >
+          <div className="modal-copy">
+            <p>
+              Data yang telah dihapus tidak dapat dikembalikan melalui halaman
+              ini. Kelas berisi siswa harus dikosongkan terlebih dahulu.
+            </p>
+          </div>
+          <footer>
+            <Button variant="secondary" onClick={() => setDel(undefined)}>
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                try {
+                  await remove(tab, del.id);
+                  setDel(undefined);
+                } catch (e) {
+                  toast((e as Error).message, true);
+                }
+              }}
+            >
+              Hapus data
+            </Button>
+          </footer>
+        </Modal>
+      )}
+      {imp && <ImportWizard onClose={() => setImp(false)} />}
+    </>
+  );
+}
+function ImportWizard({ onClose }: { onClose: () => void }) {
+  const { data, user, reload, toast } = useApp();
+  const [rows, setRows] = useState<Record<string, any>[]>([]),
+    [headers, setHeaders] = useState<string[]>([]),
+    [mapping, setMapping] = useState<Record<string, string>>({}),
+    [step, setStep] = useState(1),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [history, setHistory] = useState<Row[]>([]);
+  const keys = [
+    ["name", "Nama lengkap"],
+    ["nisn", "NISN"],
+    ["class", "Kelas"],
+    ["gender", "Jenis kelamin"],
+    ["parent", "Orang tua"],
+    ["phone", "Telepon"],
+  ];
+  const mapped: any[] = rows.map((r, i) => {
+    const v = Object.fromEntries(
+      keys.map(([key]) => [key, String(r[mapping[key]] ?? "").trim()]),
+    );
+    const c = data.classes.find(
+      (c) => c.name.toLowerCase() === v.class.toLowerCase(),
+    );
+    const errors = [];
+    if (!v.name) errors.push("Nama kosong");
+    if (!/^\d{10}$/.test(v.nisn)) errors.push("NISN harus 10 digit");
+    if (
+      data.students.some((s) => s.nisn === v.nisn) ||
+      rows.slice(0, i).some((p) => String(p[mapping.nisn]) === v.nisn)
+    )
+      errors.push("NISN duplikat");
+    if (!c) errors.push("Kelas tidak ditemukan");
+    if (!["L", "P", "Laki-laki", "Perempuan"].includes(v.gender))
+      errors.push("Gender harus L/P");
+    return {
+      ...v,
+      classId: c?.id,
+      gender: ["P", "Perempuan"].includes(v.gender) ? "P" : "L",
+      errors,
+    };
+  });
+  return (
+    <Modal
+      title="Impor siswa dari Excel / Dapodik"
+      subtitle="Unggah → petakan kolom → validasi → impor. Tidak ada data yang ditimpa."
+      onClose={onClose}
+      wide
+    >
+      <div className="import-body">
+        <div className="stepper">
+          {["Unggah berkas", "Pemetaan kolom", "Validasi & impor"].map(
+            (s, i) => (
+              <div className={step >= i + 1 ? "active" : ""} key={s}>
+                <span>{step > i + 1 ? <Check size={14} /> : i + 1}</span>
+                {s}
+              </div>
+            ),
+          )}
+        </div>
+        {step === 1 && (
+          <>
+            <label className="upload-zone large">
+              <FileSpreadsheet size={36} />
+              <strong>Pilih berkas Excel atau CSV</strong>
+              <span>
+                Format .xlsx, .xls, .csv · maksimal 5 MB · 2.000 siswa
+              </span>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setError("");
+                  if (file.size > 5 * 1024 * 1024) {
+                    setError("Ukuran berkas maksimal 5 MB");
+                    return;
+                  }
+                  try {
+                    const XLSX = await import("xlsx");
+                    const wb = XLSX.read(await file.arrayBuffer(), {
+                      type: "array",
+                    });
+                    const rs = XLSX.utils.sheet_to_json<Record<string, any>>(
+                      wb.Sheets[wb.SheetNames[0]],
+                      { defval: "", raw: false },
+                    );
+                    if (!rs.length || rs.length > 2000)
+                      throw new Error("Berkas harus berisi 1–2.000 siswa.");
+                    const hs = Object.keys(rs[0]);
+                    setHeaders(hs);
+                    setRows(rs);
+                    const saved = JSON.parse(
+                      localStorage.getItem(`kk-mapping-${user.school}`) || "{}",
+                    );
+                    const aliases: Record<string, string[]> = {
+                      name: ["nama", "nama lengkap", "nama siswa"],
+                      nisn: ["nisn"],
+                      class: ["kelas", "rombel"],
+                      gender: ["jk", "gender", "jenis kelamin"],
+                      parent: ["orang tua", "nama orang tua", "wali"],
+                      phone: ["telepon", "hp", "no hp"],
+                    };
+                    setMapping(
+                      Object.fromEntries(
+                        keys.map(([k]) => [
+                          k,
+                          hs.includes(saved[k])
+                            ? saved[k]
+                            : hs.find((h) =>
+                                aliases[k].includes(h.toLowerCase()),
+                              ) || "",
+                        ]),
+                      ),
+                    );
+                    setStep(2);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
+              />
+            </label>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                exportExcel(
+                  [
+                    {
+                      Nama: "Anisa Putri",
+                      NISN: "0012345678",
+                      Kelas: data.classes[0]?.name,
+                      JK: "P",
+                      "Orang Tua": "Ibu Rina",
+                      Telepon: "081234567890",
+                    },
+                  ],
+                  "Template-Impor-Siswa",
+                )
+              }
+            >
+              <Download size={16} />
+              Unduh template contoh
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                try {
+                  setHistory(await api("/api/imports"));
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              <History size={16} />
+              Riwayat impor & rollback
+            </Button>
+            {history.map((h) => (
+              <div className="import-history" key={h.id}>
+                <div>
+                  <strong>{h.count} siswa</strong>
+                  <small>
+                    {date(h.date)} · {h.status}
+                  </small>
+                </div>
+                {h.status === "Selesai" && (
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      try {
+                        await api(`/api/imports/${h.id}/rollback`, {});
+                        setHistory(await api("/api/imports"));
+                        await reload();
+                        toast(
+                          "Impor dibatalkan. Data yang telah mendapat aktivitas baru dipertahankan.",
+                        );
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
+                  >
+                    Rollback impor
+                  </Button>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+        {step === 2 && (
+          <>
+            <p className="card-copy">
+              Ditemukan {rows.length} baris. Cocokkan kolom berkas dengan data
+              KabarKelas.
+            </p>
+            <div className="form-grid">
+              {keys.map(([k, label]) => (
+                <label key={k}>
+                  {label}
+                  {["name", "nisn", "class", "gender"].includes(k) && " *"}
+                  <select
+                    value={mapping[k] || ""}
+                    onChange={(e) =>
+                      setMapping({ ...mapping, [k]: e.target.value })
+                    }
+                  >
+                    <option value="">Tidak dipetakan</option>
+                    {headers.map((h) => (
+                      <option key={h}>{h}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <footer>
+              <Button variant="secondary" onClick={() => setStep(1)}>
+                Kembali
+              </Button>
+              <Button
+                disabled={
+                  !["name", "nisn", "class", "gender"].every((k) => mapping[k])
+                }
+                onClick={() => {
+                  localStorage.setItem(
+                    `kk-mapping-${user.school}`,
+                    JSON.stringify(mapping),
+                  );
+                  setStep(3);
+                }}
+              >
+                Validasi data <ArrowRight size={15} />
+              </Button>
+            </footer>
+          </>
+        )}
+        {step === 3 && (
+          <>
+            <div
+              className={`callout ${mapped.some((r) => r.errors.length) ? "amber" : "green"}`}
+            >
+              <CheckCircle2 size={20} />
+              <span>
+                {mapped.filter((r) => !r.errors.length).length} data valid ·{" "}
+                {mapped.filter((r) => r.errors.length).length} data perlu
+                diperbaiki. Perbaiki berkas bila ditemukan kesalahan.
+              </span>
+            </div>
+            <div className="table-scroll import-preview">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nama</th>
+                    <th>NISN</th>
+                    <th>Kelas</th>
+                    <th>Validasi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mapped.slice(0, 30).map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.name}</td>
+                      <td>{r.nisn}</td>
+                      <td>{r.class}</td>
+                      <td>
+                        {r.errors.length ? (
+                          <span className="text-red">
+                            {r.errors.join(", ")}
+                          </span>
+                        ) : (
+                          <Badge tone="green">Valid</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <small className="muted">
+              Pratinjau maksimal 30 baris. Semua {mapped.length} baris telah
+              divalidasi.
+            </small>
+            <footer>
+              <Button variant="secondary" onClick={() => setStep(2)}>
+                Ubah pemetaan
+              </Button>
+              <Button
+                disabled={busy || mapped.some((r) => r.errors.length)}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await api("/api/import-students", {
+                      rows: mapped.map(({ errors, ...r }) => r),
+                    });
+                    await reload();
+                    toast(`${mapped.length} siswa berhasil diimpor`);
+                    onClose();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <Upload size={16} />
+                )}
+                Impor {mapped.length} siswa
+              </Button>
+            </footer>
+          </>
+        )}
+        {error && <div className="form-error">{error}</div>}
+      </div>
+    </Modal>
+  );
+}
 
-export function Finance(){const {data,user,school,save,toast}=useApp();const [status,setStatus]=useState('all'),[query,setQuery]=useState(''),[page,setPage]=useState(1),[payment,setPayment]=useState<Row|undefined>(),[add,setAdd]=useState(false),[busy,setBusy]=useState(false);const personal=['parent','student'].includes(user.role);const rows=data.invoices.filter(i=>(status==='all'||i.status===status)&&((data.students.find(s=>s.id===i.studentId)?.name||'')+' '+i.title).toLowerCase().includes(query.toLowerCase()));const total=data.invoices.reduce((a,i)=>a+i.amount,0),paid=data.invoices.filter(i=>i.status==='Lunas').reduce((a,i)=>a+i.amount,0);return <><PageHead eyebrow="TRANSPARAN, TERTIB, TERHUBUNG" title="Keuangan & SPP" description={personal?'Lihat tagihan dan riwayat pembayaran pendidikan dalam satu tempat.':'Pantau penerimaan, kelola tagihan, dan sederhanakan administrasi keuangan.'} action={<><ExportButton onClick={()=>exportExcel(rows.map(i=>({Nama:data.students.find(s=>s.id===i.studentId)?.name,Tagihan:i.title,Jumlah:i.amount,JatuhTempo:i.due,Status:i.status})),'Rekap-SPP')}/>{user.role==='admin'&&<Button onClick={()=>setAdd(true)}><Plus size={16}/>Buat tagihan</Button>}</>}/><div className="metrics three"><Metric label="Total tagihan" value={currency(total)} icon={Wallet} note="September – November 2026"/><Metric label="Sudah dibayar" value={currency(paid)} icon={CheckCircle2} tone="blue" note={`${Math.round(paid/Math.max(total,1)*100)}% dari total tagihan`}/><Metric label="Belum dibayar" value={currency(total-paid)} icon={ClockIcon} tone="amber" note="termasuk tagihan bulan mendatang"/></div><div className="callout blue"><CreditCard size={21}/><p><strong>Mode pembayaran simulasi.</strong> Semua pembayaran pada demo ini tidak memindahkan uang atau terhubung ke bank.</p></div><Panel title="Tagihan & pembayaran"><div className="table-toolbar"><SearchBox value={query} onChange={v=>{setQuery(v);setPage(1);}} placeholder="Cari nama atau tagihan…"/><select value={status} aria-label="Status pembayaran" onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="all">Semua status</option><option>Lunas</option><option>Belum lunas</option></select></div><div className="table-scroll"><table><thead><tr><th>Siswa</th><th>Tagihan</th><th>Jumlah</th><th>Jatuh tempo</th><th>Status</th><th/></tr></thead><tbody>{rows.slice((page-1)*12,page*12).map(i=>{const s=data.students.find(s=>s.id===i.studentId)!;return <tr key={i.id}><td><div className="person"><Avatar photo={s.photo} size={34}/><strong>{s.name}</strong></div></td><td>{i.title}</td><td><strong>{currency(i.amount)}</strong></td><td>{date(i.due,true)}</td><td><Badge tone={tone(i.status)}>{i.status}</Badge></td><td>{i.status==='Lunas'?<Button variant="ghost" onClick={()=>receiptPDF(i,s,school)}><Download size={14}/>Kuitansi</Button>:['parent','admin'].includes(user.role)?<Button variant="secondary" onClick={()=>setPayment(i)}><CreditCard size={14}/>Bayar simulasi</Button>:<span className="muted">Menunggu pembayaran</span>}</td></tr>;})}</tbody></table></div>{!rows.length&&<Empty title="Tagihan tidak ditemukan"/>}<Pagination page={page} total={rows.length} onChange={setPage}/></Panel>{payment&&<Modal title="Simulasi pembayaran" subtitle="Tidak ada transaksi keuangan nyata." onClose={()=>setPayment(undefined)}><div className="payment-summary"><span className="payment-icon"><CreditCard size={28}/></span><small>{payment.title}</small><h2>{currency(payment.amount)}</h2><p>{data.students.find(s=>s.id===payment.studentId)?.name}</p><div><span>Metode</span><strong>Virtual Account Demo</strong></div><div><span>Nomor pembayaran</span><strong>8800 2026 {payment.id.slice(-5).replaceAll('-','0')}</strong></div><div><span>Biaya layanan</span><strong>Rp0</strong></div><Button disabled={busy} className="full-width" onClick={async()=>{setBusy(true);try{await save('invoices',payment);setPayment(undefined);toast('Pembayaran simulasi berhasil. Kuitansi dapat diunduh.');}catch{}finally{setBusy(false);}}}><CheckCircle2 size={16}/>Konfirmasi pembayaran simulasi</Button></div></Modal>}{add&&<FormModal title="Buat tagihan siswa" fields={[{key:'studentId',label:'Siswa',required:true,options:data.students.map(s=>({value:s.id,label:s.name}))},{key:'title',label:'Nama tagihan',required:true},{key:'amount',label:'Nominal (Rp)',type:'number',min:1,required:true},{key:'due',label:'Jatuh tempo',type:'date',required:true}]} initial={{status:'Belum lunas',amount:650000,due:'2026-11-10'}} onClose={()=>setAdd(false)} onSave={v=>save('invoices',v)}/>}</>;}
-const ClockIcon=History;
-export function Announcements(){const {data,user,save}=useApp();const [query,setQuery]=useState(''),[detail,setDetail]=useState<Row|undefined>(),[form,setForm]=useState<Partial<Row>|null>(null);const editable=['admin','principal','teacher','homeroom'].includes(user.role);return <><PageHead eyebrow="KABAR BAIK DIMULAI DARI SINI" title="Pengumuman sekolah" description="Informasi penting, cerita prestasi, dan agenda untuk seluruh keluarga sekolah." action={editable?<Button onClick={()=>setForm({category:'Akademik'})}><Plus size={16}/>Buat pengumuman</Button>:undefined}/><div className="section-toolbar"><span className="muted">{data.announcements.length} kabar dari sekolah</span><SearchBox value={query} onChange={setQuery} placeholder="Cari pengumuman…"/></div><div className="announcement-grid">{data.announcements.filter(a=>a.title.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>Number(b.pinned||0)-Number(a.pinned||0)||b.date.localeCompare(a.date)).map((a,i)=><article className={`announcement-card ${i===0?'featured':''}`} key={a.id}><div className={`announcement-visual visual-${i%4}`}><span>{a.category.toUpperCase()}</span>{i%3===0?<CalendarGraphic/>:i%3===1?<Users size={72} strokeWidth={1}/>:<GraduationCap size={80} strokeWidth={1}/>}<i/><b/></div><div className="announcement-copy"><div><Badge tone={i%2?'blue':'green'}>{a.category}</Badge><small>{date(a.date,true)}</small></div><h2>{a.title}</h2><p>{a.body}</p><div><span>Oleh {a.author}</span><button className="text-btn" onClick={()=>setDetail(a)}>Baca selengkapnya <ArrowRight size={15}/></button></div></div></article>)}</div>{detail&&<Modal title={detail.title} subtitle={`${detail.category} · ${date(detail.date)}`} onClose={()=>setDetail(undefined)}><div className="reading-content"><p>{detail.body}</p><small>Oleh {detail.author}</small>{editable&&<Button variant="secondary" onClick={()=>{setForm(detail);setDetail(undefined);}}><Pencil size={15}/>Edit pengumuman</Button>}</div></Modal>}{form&&<FormModal title={form.id?'Edit pengumuman':'Buat pengumuman'} initial={form} fields={[{key:'title',label:'Judul',required:true},{key:'category',label:'Kategori',required:true,options:['Akademik','Orang tua','Prestasi','Administrasi','Kegiatan'].map(x=>({value:x,label:x}))},{key:'body',label:'Isi pengumuman',type:'textarea',required:true}]} onClose={()=>setForm(null)} onSave={v=>save('announcements',{...v,date:new Date().toISOString().slice(0,10),author:user.name})}/>}</>;}
-function CalendarGraphic(){return <div className="calendar-graphic"><span>OKTOBER</span><strong>26</strong><small>Mulai cerita baru.</small></div>;}
+export function Finance() {
+  const { data, user, school, save } = useApp();
+  const [status, setStatus] = useState("all"),
+    [query, setQuery] = useState(""),
+    [payment, setPayment] = useState<Row | null>(null),
+    [add, setAdd] = useState(false);
+  const admin = user.role === "admin";
+  const paidOf = (i: Row) =>
+    i.paidAmount ?? (i.status === "Lunas" ? i.amount : 0);
+  const total = data.invoices.reduce((a, i) => a + i.amount, 0),
+    paid = data.invoices.reduce((a, i) => a + paidOf(i), 0);
+  const rows = data.invoices.filter(
+    (i) =>
+      (status === "all" || i.status === status) &&
+      `${i.title} ${data.students.find((s) => s.id === i.studentId)?.name}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+  return (
+    <>
+      <PageHead
+        title="Keuangan & SPP"
+        description={
+          admin
+            ? "Kelola tagihan dan catat pembayaran yang diterima sekolah."
+            : "Lihat tagihan serta pembayaran yang telah dicatat sekolah."
+        }
+        action={
+          <>
+            <ExportButton
+              onClick={() =>
+                exportExcel(
+                  rows.map((i) => ({
+                    Nama: data.students.find((s) => s.id === i.studentId)?.name,
+                    Tagihan: i.title,
+                    Nominal: i.amount,
+                    Terbayar: paidOf(i),
+                    Sisa: i.amount - paidOf(i),
+                    Status: i.status,
+                  })),
+                  "Rekap-SPP",
+                )
+              }
+            />
+            {admin && (
+              <Button onClick={() => setAdd(true)}>
+                <Plus size={16} />
+                Buat tagihan
+              </Button>
+            )}
+          </>
+        }
+      />
+      <div className="metrics three">
+        <Metric label="Total tagihan" value={currency(total)} icon={Wallet} />
+        <Metric
+          label="Tercatat dibayar"
+          value={currency(paid)}
+          icon={CheckCircle2}
+          tone="blue"
+        />
+        <Metric
+          label="Sisa tagihan"
+          value={currency(total - paid)}
+          icon={Wallet}
+          tone="amber"
+        />
+      </div>
+      <div className="callout blue">
+        <Wallet size={22} />
+        <p>
+          Pembayaran melalui kas sekolah atau transfer manual sesuai petunjuk
+          sekolah. Admin mencatat penerimaan dan menerbitkan kuitansi di
+          aplikasi.
+        </p>
+      </div>
+      <Panel
+        title="Tagihan siswa"
+        action={
+          <div className="operation-actions">
+            <SearchBox
+              value={query}
+              onChange={setQuery}
+              placeholder="Cari siswa atau tagihan…"
+            />
+            <select
+              aria-label="Status tagihan"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="all">Semua status</option>
+              {["Belum lunas", "Sebagian", "Lunas"].map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        }
+      >
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Siswa / tagihan</th>
+                <th>Jatuh tempo</th>
+                <th>Nominal</th>
+                <th>Terbayar</th>
+                <th>Sisa</th>
+                <th>Status</th>
+                {admin && <th>Tindakan</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((i) => (
+                <tr key={i.id}>
+                  <td>
+                    <strong>
+                      {data.students.find((s) => s.id === i.studentId)?.name}
+                    </strong>
+                    <small className="block">{i.title}</small>
+                  </td>
+                  <td>{date(i.due, true)}</td>
+                  <td>{currency(i.amount)}</td>
+                  <td>{currency(paidOf(i))}</td>
+                  <td>{currency(i.amount - paidOf(i))}</td>
+                  <td>
+                    <Badge
+                      tone={i.status === "Sebagian" ? "amber" : tone(i.status)}
+                    >
+                      {i.status}
+                    </Badge>
+                  </td>
+                  {admin && (
+                    <td>
+                      {i.amount > paidOf(i) && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => setPayment(i)}
+                        >
+                          Catat pembayaran
+                        </Button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!rows.length && <Empty title="Tidak ada tagihan pada filter ini" />}
+      </Panel>
+      <Panel
+        title="Riwayat penerimaan"
+        subtitle="Kuitansi dibuat dari transaksi yang sudah tercatat."
+      >
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Siswa</th>
+                <th>Tagihan</th>
+                <th>Nominal</th>
+                <th>Metode</th>
+                <th>Kuitansi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.payments
+                .slice()
+                .reverse()
+                .map((p) => {
+                  const student = data.students.find(
+                    (s) => s.id === p.studentId,
+                  )!;
+                  const invoice = data.invoices.find(
+                    (i) => i.id === p.invoiceId,
+                  );
+                  return (
+                    <tr key={p.id}>
+                      <td>{date(p.date, true)}</td>
+                      <td>{student?.name}</td>
+                      <td>{invoice?.title}</td>
+                      <td>{currency(p.amount)}</td>
+                      <td>{p.method}</td>
+                      <td>
+                        <Button
+                          variant="ghost"
+                          onClick={() =>
+                            receiptPDF(
+                              {
+                                ...p,
+                                title: invoice?.title,
+                                paidAt: p.date,
+                                status: "Tercatat",
+                              },
+                              student,
+                              school,
+                            )
+                          }
+                        >
+                          <Download size={14} />
+                          Kuitansi
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+        {!data.payments.length && (
+          <Empty title="Belum ada penerimaan tercatat" />
+        )}
+      </Panel>
+      {payment && (
+        <FormModal
+          title="Catat pembayaran diterima"
+          initial={{
+            ...payment,
+            paymentAmount: payment.amount - paidOf(payment),
+            method: "Tunai",
+            paymentDate: new Date().toLocaleDateString("en-CA", {
+              timeZone: "Asia/Jakarta",
+            }),
+          }}
+          fields={[
+            {
+              key: "paymentAmount",
+              label: `Nominal diterima (sisa ${currency(payment.amount - paidOf(payment))})`,
+              type: "number",
+              min: 1,
+              max: payment.amount - paidOf(payment),
+              required: true,
+            },
+            {
+              key: "method",
+              label: "Metode",
+              options: ["Tunai", "Transfer manual"].map((value) => ({
+                value,
+                label: value,
+              })),
+              required: true,
+            },
+            {
+              key: "paymentDate",
+              label: "Tanggal diterima",
+              type: "date",
+              required: true,
+            },
+            {
+              key: "note",
+              label: "Catatan / referensi transfer",
+              type: "textarea",
+            },
+          ]}
+          onClose={() => setPayment(null)}
+          onSave={(v) => save("invoices", v)}
+          label="Simpan penerimaan"
+        />
+      )}
+      {add && (
+        <FormModal
+          title="Buat tagihan"
+          initial={{ due: "2026-11-10" }}
+          fields={[
+            {
+              key: "studentId",
+              label: "Siswa",
+              options: data.students.map((s) => ({
+                value: s.id,
+                label: s.name,
+              })),
+              required: true,
+            },
+            { key: "title", label: "Nama tagihan", required: true },
+            {
+              key: "amount",
+              label: "Nominal (Rp)",
+              type: "number",
+              min: 1,
+              required: true,
+            },
+            { key: "due", label: "Jatuh tempo", type: "date", required: true },
+          ]}
+          onClose={() => setAdd(false)}
+          onSave={(v) => save("invoices", v)}
+        />
+      )}
+    </>
+  );
+}
 
-export function Settings(){const {data,user,save,toast}=useApp();const [tab,setTab]=useState('school'),[values,setValues]=useState(data.settings[0]||{}),[busy,setBusy]=useState(false),[error,setError]=useState('');const editable=user.role==='admin';const tabs=[['school','Identitas sekolah',Building2],['academic','Konfigurasi akademik',BookOpen],['ews','Aturan Early Warning',Activity],['report','Template rapor',Palette],['roles','Peran & akses',LockKeyhole],['audit','Audit & backup',ShieldCheck]] as const;const input=(key:string,label:string,type='text',min?:number,max?:number)=><label>{label}<input disabled={!editable} type={type} min={min} max={max} required value={values[key]??''} onChange={e=>setValues({...values,[key]:type==='number'?Number(e.target.value):e.target.value})}/></label>;const submit=async(e:React.FormEvent)=>{e.preventDefault();setError('');if(Number(values.weightDaily)+Number(values.weightMidterm)+Number(values.weightFinal)!==100){setError('Total bobot Harian, UTS, dan UAS harus 100%.');return;}setBusy(true);try{await save('settings',values);}catch(e){setError((e as Error).message);}finally{setBusy(false);}};return <><PageHead eyebrow="SESUAI CARA SEKOLAHMU BEKERJA" title="Pengaturan sekolah" description="Satu sistem yang fleksibel untuk kebutuhan sekolah yang berbeda."/><div className="settings-layout"><nav className="settings-nav">{tabs.map(([id,label,Icon])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}><Icon size={17}/>{label}<ChevronRight size={14}/></button>)}</nav><Panel title={tabs.find(t=>t[0]===tab)?.[1]} subtitle={!editable?'Tampilan informasi. Beralih ke Admin Sekolah untuk mengubah konfigurasi.':'Perubahan akan diterapkan untuk sekolah yang sedang dipilih.'}><form onSubmit={submit}><div className="settings-content">{tab==='school'&&<><div className="school-brand-preview"><span className="school-emblem large"><GraduationCap size={32}/></span><div><h3>{values.name}</h3><p>{values.curriculum}</p></div></div><div className="form-grid">{input('name','Nama sekolah')}{input('principal','Kepala sekolah')}{input('address','Alamat sekolah')}{input('footer','Motto / footer rapor')}</div></>}{tab==='academic'&&<><div className="form-grid">{input('year','Tahun ajaran')}{input('semester','Semester')}<label>Kurikulum<select disabled={!editable} value={values.curriculum} onChange={e=>setValues({...values,curriculum:e.target.value})}><option>Kurikulum Merdeka</option><option>Kurikulum 2013</option><option>Kurikulum PKBM</option></select></label>{input('kkm','KKM default','number',0,100)}</div><h4>Bobot nilai akhir</h4><p className="card-copy">Perubahan bobot digunakan saat nilai disimpan berikutnya. Total ketiga bobot harus 100%.</p><div className="form-grid three-cols">{input('weightDaily','Harian (%)','number',0,100)}{input('weightMidterm','UTS (%)','number',0,100)}{input('weightFinal','UAS (%)','number',0,100)}</div></>}{tab==='ews'&&<><div className="callout amber"><Activity size={20}/><p>Risiko tinggi: 3 atau lebih indikator. Risiko sedang: 1–2 indikator. EWS dievaluasi kembali ketika data diperbarui.</p></div><div className="form-grid">{input('ewsAttendance','Kehadiran di bawah (%)','number',1,100)}{input('ewsDrop','Penurunan nilai di atas (poin)','number',1,100)}{input('ewsOverdue','Tugas belum selesai minimal','number',1,20)}</div><div className="rule-card"><CheckCircle2 size={18}/><div><strong>Nilai di bawah KKM</strong><p>Mengikuti KKM sekolah yang diatur dalam konfigurasi akademik.</p></div><Badge tone="green">Aktif</Badge></div></>}{tab==='report'&&<><div className="template-options">{['Merdeka','Klasik','Minimalis'].map(t=><button type="button" disabled={!editable} className={values.template===t?'selected':''} key={t} onClick={()=>setValues({...values,template:t})}><div className={`template-thumb ${t}`}><span/><i/><i/><i/><i/><b/></div><span>{t}</span>{values.template===t&&<CheckCircle2 size={16}/>}</button>)}</div><div className="form-grid">{input('color','Warna identitas','color')}{input('footer','Footer rapor')}{input('principal','Nama penanda tangan')}</div><div className="callout blue"><FileSpreadsheet size={18}/><p>Template dan warna digunakan pada ekspor PDF berikutnya. Tanda tangan pada demo berupa nama kepala sekolah.</p></div></>}{tab==='roles'&&<div className="table-scroll"><table><thead><tr><th>Peran</th><th>Cakupan data</th><th>Tindakan</th></tr></thead><tbody>{Object.entries(roleNames).map(([k,v])=><tr key={k}><td><strong>{v}</strong></td><td>{['parent','student'].includes(k)?'Siswa terhubung':['teacher','homeroom'].includes(k)?'Kelas yang diajar':k==='superadmin'?'Tenant & penggunaan':'Sekolah aktif'}</td><td>{k==='admin'?'Kelola seluruh data':k==='teacher'?'Absensi, nilai, tugas, draf rapor':k==='homeroom'?'Data kelas & persetujuan rapor':k==='principal'?'Insight, intervensi, persetujuan':k==='parent'?'Pesan & pembayaran simulasi':k==='student'?'Pengumpulan tugas & kuis':'Pantau unit sekolah'}</td></tr>)}</tbody></table></div>}{tab==='audit'&&<><div className="backup-card"><HardDrive size={30}/><div><h3>Cadangan data sekolah</h3><p>Ekspor JSON berisi data demo sekolah aktif. Simpan untuk pemulihan.</p></div><Button type="button" variant="secondary" onClick={async()=>{try{downloadJSON(await api('/api/backup'),`Backup-KabarKelas-${user.school}.json`);toast('Cadangan berhasil diunduh');}catch(e){toast((e as Error).message,true);}}}><Download size={15}/>Backup</Button></div>{editable&&<label className="restore-upload">Pulihkan cadangan JSON sekolah ini<input type="file" accept=".json" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;try{const v=JSON.parse(await f.text());await api('/api/restore',v);location.reload();}catch(e){toast((e as Error).message,true);}}}/></label>}<h4>Jejak aktivitas</h4><div className="audit-list">{[...data.audit].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30).map(a=><div key={a.id}><span className="timeline-icon"><History size={15}/></span><div><strong>{a.action}</strong><small>{a.actor} · {date(a.date,true)}</small></div></div>)}</div></>}</div>{error&&<div className="form-error">{error}</div>}{editable&&['school','academic','ews','report'].includes(tab)&&<footer><Button type="submit" disabled={busy}><Save size={16}/>Simpan pengaturan</Button></footer>}</form></Panel></div></>;}
+export function Announcements() {
+  const { data, user, save } = useApp();
+  const [query, setQuery] = useState(""),
+    [detail, setDetail] = useState<Row | undefined>(),
+    [form, setForm] = useState<Partial<Row> | null>(null);
+  const editable = ["admin", "principal", "teacher"].includes(user.role);
+  return (
+    <>
+      <PageHead
+        eyebrow="KABAR BAIK DIMULAI DARI SINI"
+        title="Pengumuman sekolah"
+        description="Informasi penting, cerita prestasi, dan agenda untuk seluruh keluarga sekolah."
+        action={
+          editable ? (
+            <Button
+              onClick={() =>
+                setForm({
+                  category: "Akademik",
+                  audience: "Semua",
+                  status: "Terbit",
+                })
+              }
+            >
+              <Plus size={16} />
+              Buat pengumuman
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className="section-toolbar">
+        <span className="muted">
+          {data.announcements.length} kabar dari sekolah
+        </span>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          placeholder="Cari pengumuman…"
+        />
+      </div>
+      <div className="announcement-grid">
+        {data.announcements
+          .filter((a) => a.title.toLowerCase().includes(query.toLowerCase()))
+          .sort(
+            (a, b) =>
+              Number(b.pinned || 0) - Number(a.pinned || 0) ||
+              b.date.localeCompare(a.date),
+          )
+          .map((a, i) => (
+            <article
+              className={`announcement-card ${i === 0 ? "featured" : ""}`}
+              key={a.id}
+            >
+              <div className={`announcement-visual visual-${i % 4}`}>
+                <span>{a.category.toUpperCase()}</span>
+                {i % 3 === 0 ? (
+                  <CalendarGraphic />
+                ) : i % 3 === 1 ? (
+                  <Users size={72} strokeWidth={1} />
+                ) : (
+                  <GraduationCap size={80} strokeWidth={1} />
+                )}
+                <i />
+                <b />
+              </div>
+              <div className="announcement-copy">
+                <div>
+                  <Badge tone={i % 2 ? "blue" : "green"}>{a.category}</Badge>
+                  <small>{date(a.date, true)}</small>
+                </div>
+                <h2>{a.title}</h2>
+                <p>{a.body}</p>
+                <div>
+                  <span>Oleh {a.author}</span>
+                  <button className="text-btn" onClick={() => setDetail(a)}>
+                    Baca selengkapnya <ArrowRight size={15} />
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+      </div>
+      {detail && (
+        <Modal
+          title={detail.title}
+          subtitle={`${detail.category} · ${date(detail.date)}`}
+          onClose={() => setDetail(undefined)}
+        >
+          <div className="reading-content">
+            <p>{detail.body}</p>
+            <small>Oleh {detail.author}</small>
+            {editable && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setForm(detail);
+                  setDetail(undefined);
+                }}
+              >
+                <Pencil size={15} />
+                Edit pengumuman
+              </Button>
+            )}
+          </div>
+        </Modal>
+      )}
+      {form && (
+        <FormModal
+          title={form.id ? "Edit pengumuman" : "Buat pengumuman"}
+          initial={form}
+          fields={[
+            { key: "title", label: "Judul", required: true },
+            {
+              key: "audience",
+              label: "Ditujukan kepada",
+              options: ["Semua", ...Object.values(roleNames)].map((value) => ({
+                value,
+                label: value,
+              })),
+              required: true,
+            },
+            {
+              key: "status",
+              label: "Status",
+              options: ["Draf", "Terbit"].map((value) => ({
+                value,
+                label: value,
+              })),
+              required: true,
+            },
+            {
+              key: "category",
+              label: "Kategori",
+              required: true,
+              options: [
+                "Akademik",
+                "Orang tua",
+                "Prestasi",
+                "Administrasi",
+                "Kegiatan",
+              ].map((x) => ({ value: x, label: x })),
+            },
+            {
+              key: "body",
+              label: "Isi pengumuman",
+              type: "textarea",
+              required: true,
+            },
+          ]}
+          onClose={() => setForm(null)}
+          onSave={(v) =>
+            save("announcements", {
+              ...v,
+              date: new Date().toISOString().slice(0, 10),
+              author: user.name,
+            })
+          }
+        />
+      )}
+    </>
+  );
+}
+function CalendarGraphic() {
+  return (
+    <div className="calendar-graphic">
+      <span>OKTOBER</span>
+      <strong>26</strong>
+      <small>Mulai cerita baru.</small>
+    </div>
+  );
+}
 
-export function Integrations(){const {data,user,save,toast}=useApp();const [detail,setDetail]=useState<Row|undefined>();const icons=[FileSpreadsheet,GraduationCap,FileSpreadsheet,MessageSquare,CreditCard,Mail];return <><PageHead eyebrow="EKOSISTEM YANG SALING TERHUBUNG" title="Integrasi" description="Kurangi input berulang dengan menghubungkan alat yang digunakan sekolah."/><div className="callout blue"><Link size={21}/><p><strong>Lingkungan demo.</strong> Koneksi di bawah merupakan simulasi. Integrasi nyata memerlukan akun penyedia, izin API, dan konfigurasi server.</p></div><div className="card-grid">{data.integrations.map((i,n)=>{const Icon=icons[n%6];return <Panel key={i.id}><div className="integration-top"><span className={`integration-icon color-${n%4}`}><Icon size={27}/></span><Badge tone={i.connected?'green':'neutral'}>{i.connected?'Demo terhubung':'Belum terhubung'}</Badge></div><h3 className="card-title">{i.name}</h3><p className="card-copy">{['Impor siswa, guru, dan rombel melalui berkas ekspor Dapodik.','Simulasikan sinkronisasi kelas, tugas, dan pengumpulan siswa.','Impor hasil evaluasi dari Google Forms melalui Excel.','Pratinjau pengingat dan notifikasi untuk orang tua.','Uji alur tagihan, konfirmasi pembayaran, dan kuitansi.','Siapkan notifikasi agenda dan pengumuman sekolah.'][n]}</p><small className="sync-status">{i.lastSync?'Simulasi terakhir: '+date(i.lastSync,true):'Belum ada aktivitas'}</small><Button variant="secondary" className="full-width" onClick={()=>setDetail(i)}>{i.connected?'Kelola koneksi':'Konfigurasi demo'}<ArrowRight size={15}/></Button></Panel>;})}</div>{detail&&<Modal title={detail.name} subtitle="Konfigurasi integrasi simulasi" onClose={()=>setDetail(undefined)}><div className="modal-copy"><div className="callout amber"><ShieldCheck size={20}/><p>Tidak ada koneksi atau pengiriman data ke layanan eksternal. Jangan masukkan kredensial asli pada demo.</p></div><p className="card-copy">Gunakan impor Excel untuk Dapodik dan Forms. Integrasi lainnya memperagakan status koneksi, aktivitas sinkronisasi, dan kuota.</p><div className="usage-row"><span>Kuota demo</span><strong>0 / 1.000 permintaan</strong></div><div className="progress-track"><i style={{width:'0%'}}/></div></div><footer><Button variant="secondary" onClick={async()=>{await save('integrations',{...detail,connected:!detail.connected,lastSync:detail.lastSync});setDetail(undefined);}}>{detail.connected?'Putuskan demo':'Hubungkan simulasi'}</Button>{detail.connected&&<Button onClick={async()=>{await save('integrations',{...detail,lastSync:new Date().toISOString()});setDetail(undefined);toast('Simulasi sinkronisasi selesai. Tidak ada data eksternal yang diambil.');}}><RefreshCw size={15}/>Simulasikan sinkronisasi</Button>}</footer></Modal>}</>;}
+export function Settings() {
+  const { data, user, save, toast } = useApp();
+  const [tab, setTab] = useState("school"),
+    [values, setValues] = useState(data.settings[0] || {}),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const editable = user.role === "admin";
+  const tabs = [
+    ["school", "Identitas sekolah", Building2],
+    ["academic", "Konfigurasi akademik", BookOpen],
+    ["report", "Template rapor", Palette],
+    ["roles", "Peran & akses", LockKeyhole],
+    ["audit", "Audit & backup", ShieldCheck],
+  ] as const;
+  const input = (
+    key: string,
+    label: string,
+    type = "text",
+    min?: number,
+    max?: number,
+  ) => (
+    <label>
+      {label}
+      <input
+        disabled={!editable}
+        type={type}
+        min={min}
+        max={max}
+        required
+        value={values[key] ?? ""}
+        onChange={(e) =>
+          setValues({
+            ...values,
+            [key]: type === "number" ? Number(e.target.value) : e.target.value,
+          })
+        }
+      />
+    </label>
+  );
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (
+      Number(values.weightDaily) +
+        Number(values.weightMidterm) +
+        Number(values.weightFinal) !==
+      100
+    ) {
+      setError("Total bobot Harian, UTS, dan UAS harus 100%.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await save("settings", values);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="SESUAI CARA SEKOLAHMU BEKERJA"
+        title="Pengaturan sekolah"
+        description="Satu sistem yang fleksibel untuk kebutuhan sekolah yang berbeda."
+      />
+      <div className="settings-layout">
+        <nav className="settings-nav">
+          {tabs.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              className={tab === id ? "active" : ""}
+              onClick={() => setTab(id)}
+            >
+              <Icon size={17} />
+              {label}
+              <ChevronRight size={14} />
+            </button>
+          ))}
+        </nav>
+        <Panel
+          title={tabs.find((t) => t[0] === tab)?.[1]}
+          subtitle={
+            !editable
+              ? "Tampilan informasi. Beralih ke Admin Sekolah untuk mengubah konfigurasi."
+              : "Perubahan akan diterapkan untuk sekolah yang sedang dipilih."
+          }
+        >
+          <form onSubmit={submit}>
+            <div className="settings-content">
+              {tab === "school" && (
+                <>
+                  <div className="school-brand-preview">
+                    <span className="school-emblem large">
+                      <GraduationCap size={32} />
+                    </span>
+                    <div>
+                      <h3>{values.name}</h3>
+                      <p>{values.curriculum}</p>
+                    </div>
+                  </div>
+                  <div className="form-grid">
+                    {input("name", "Nama sekolah")}
+                    {input("principal", "Kepala sekolah")}
+                    {input("address", "Alamat sekolah")}
+                    {input("footer", "Motto / footer rapor")}
+                  </div>
+                </>
+              )}
+              {tab === "academic" && (
+                <>
+                  <div className="form-grid">
+                    {input("year", "Tahun ajaran")}
+                    {input("semester", "Semester")}
+                    <label>
+                      Kurikulum
+                      <select
+                        disabled={!editable}
+                        value={values.curriculum}
+                        onChange={(e) =>
+                          setValues({ ...values, curriculum: e.target.value })
+                        }
+                      >
+                        <option>Kurikulum Merdeka</option>
+                        <option>Kurikulum 2013</option>
+                        <option>Kurikulum PKBM</option>
+                      </select>
+                    </label>
+                    {input("kkm", "KKM default", "number", 0, 100)}
+                    <label>
+                      Tampilan nilai
+                      <select
+                        value={values.gradeScale || "100"}
+                        onChange={(e) =>
+                          setValues({ ...values, gradeScale: e.target.value })
+                        }
+                      >
+                        <option value="100">0–100</option>
+                        <option value="10">0–10</option>
+                        <option value="4">0–4</option>
+                        <option value="letter">Huruf A–E</option>
+                      </select>
+                    </label>
+                  </div>
+                  <h4>Bobot nilai akhir</h4>
+                  <p className="card-copy">
+                    Perubahan bobot digunakan saat nilai disimpan berikutnya.
+                    Total ketiga bobot harus 100%.
+                  </p>
+                  <div className="form-grid three-cols">
+                    {input("weightDaily", "Harian (%)", "number", 0, 100)}
+                    {input("weightMidterm", "UTS (%)", "number", 0, 100)}
+                    {input("weightFinal", "UAS (%)", "number", 0, 100)}
+                  </div>
+                </>
+              )}
+              {tab === "report" && (
+                <>
+                  <div className="template-options">
+                    {["Merdeka", "Klasik", "Minimalis"].map((t) => (
+                      <button
+                        type="button"
+                        disabled={!editable}
+                        className={values.template === t ? "selected" : ""}
+                        key={t}
+                        onClick={() => setValues({ ...values, template: t })}
+                      >
+                        <div className={`template-thumb ${t}`}>
+                          <span />
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                          <b />
+                        </div>
+                        <span>{t}</span>
+                        {values.template === t && <CheckCircle2 size={16} />}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="form-grid">
+                    {input("color", "Warna identitas", "color")}
+                    {input("footer", "Footer rapor")}
+                    {input("principal", "Nama penanda tangan")}
+                  </div>
+                  <div className="callout blue">
+                    <FileSpreadsheet size={18} />
+                    <p>
+                      Template dan warna digunakan pada ekspor PDF berikutnya.
+                      Tanda tangan pada demo berupa nama kepala sekolah.
+                    </p>
+                  </div>
+                </>
+              )}
+              {tab === "roles" && (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Peran</th>
+                        <th>Cakupan data</th>
+                        <th>Tindakan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(roleNames).map(([k, v]) => (
+                        <tr key={k}>
+                          <td>
+                            <strong>{v}</strong>
+                          </td>
+                          <td>
+                            {["parent", "student"].includes(k)
+                              ? "Siswa terhubung"
+                              : k === "teacher"
+                                ? "Kelas yang diajar; tambahan kelas perwalian"
+                                : k === "foundation"
+                                  ? "Agregat lintas sekolah"
+                                  : "Sekolah aktif"}{" "}
+                          </td>
+                          <td>
+                            {
+                              {
+                                admin:
+                                  "Data sekolah, SPP manual, presensi guru",
+                                teacher:
+                                  "Nilai, absensi, tugas; persetujuan & P5 jika wali kelas",
+                                principal:
+                                  "Pemantauan akademik, intervensi, persetujuan rapor & izin",
+                                parent:
+                                  "Perkembangan anak, riwayat SPP, penjemput",
+                                student: "Tugas, kuis, hasil belajar",
+                                foundation: "Ringkasan unit sekolah",
+                              }[k]
+                            }{" "}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {tab === "audit" && (
+                <>
+                  <div className="backup-card">
+                    <HardDrive size={30} />
+                    <div>
+                      <h3>Cadangan data sekolah</h3>
+                      <p>
+                        Ekspor JSON berisi data demo sekolah aktif. Simpan untuk
+                        pemulihan.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => {
+                        try {
+                          downloadJSON(
+                            await api("/api/backup"),
+                            `Backup-KabarKelas-${user.school}.json`,
+                          );
+                          toast("Cadangan berhasil diunduh");
+                        } catch (e) {
+                          toast((e as Error).message, true);
+                        }
+                      }}
+                    >
+                      <Download size={15} />
+                      Backup
+                    </Button>
+                  </div>
+                  {editable && (
+                    <label className="restore-upload">
+                      Pulihkan cadangan JSON sekolah ini
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          try {
+                            const v = JSON.parse(await f.text());
+                            await api("/api/restore", v);
+                            location.reload();
+                          } catch (e) {
+                            toast((e as Error).message, true);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                  <h4>Jejak aktivitas</h4>
+                  <div className="audit-list">
+                    {[...data.audit]
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .slice(0, 30)
+                      .map((a) => (
+                        <div key={a.id}>
+                          <span className="timeline-icon">
+                            <History size={15} />
+                          </span>
+                          <div>
+                            <strong>{a.action}</strong>
+                            <small>
+                              {a.actor} · {date(a.date, true)}
+                            </small>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {error && <div className="form-error">{error}</div>}
+            {editable && ["school", "academic", "report"].includes(tab) && (
+              <footer>
+                <Button type="submit" disabled={busy}>
+                  <Save size={16} />
+                  Simpan pengaturan
+                </Button>
+              </footer>
+            )}
+          </form>
+        </Panel>
+      </div>
+    </>
+  );
+}
 
-export function Foundation(){const {overview,schools,user,data,setRole,go}=useApp();const [period,setPeriod]=useState('semester');if(!['foundation','superadmin'].includes(user.role))return <><PageHead title="Yayasan & multi-sekolah" description="Lihat perkembangan setiap unit dalam satu gambaran utuh."/><div className="callout blue"><Network size={22}/><p>Beralih ke peran Pengurus Yayasan atau Super Admin untuk membuka ringkasan lintas sekolah.</p><Button onClick={()=>setRole('foundation')}>Coba peran yayasan <ArrowRight size={15}/></Button></div></>;return <><PageHead eyebrow={user.role==='superadmin'?'KENDALI PLATFORM':'SATU VISI, BANYAK RUANG TUMBUH'} title={user.role==='superadmin'?'Tenant & penggunaan':'Ringkasan yayasan'} description="Pantau kesehatan akademik dan operasional seluruh unit pendidikan." action={<select aria-label="Periode yayasan" value={period} onChange={e=>setPeriod(e.target.value)}><option value="semester">Semester ganjil 2026/2027</option><option value="all">Seluruh data demo</option></select>}/><div className="metrics four"><Metric label="Unit sekolah" value={overview.length} icon={Building2} note="dalam jaringan pendidikan"/><Metric label="Total siswa" value={overview.reduce((a,s)=>a+s.students,0)} icon={Users} tone="blue" note="di seluruh unit sekolah"/><Metric label="Rata-rata kehadiran" value={`${avg(overview.map(s=>s.attendance))}%`} icon={CheckCircle2} tone="purple" note="berdasarkan data terkini"/><Metric label="Rata-rata capaian" value={avg(overview.map(s=>s.average))} icon={TrendingUp} tone="amber" note="seluruh unit sekolah"/></div><div className="card-grid">{overview.map((s,i)=><Panel key={s.id}><div className="school-unit-top"><span className={`unit-symbol color-${i}`}>{s.short}</span><Badge tone="green">Aktif · {s.plan}</Badge></div><div className="eyebrow">{s.city}</div><h3 className="card-title">{s.name}</h3><div className="unit-stats"><div><strong>{s.students}</strong><small>Siswa</small></div><div><strong>{s.teachers}</strong><small>Guru</small></div><div><strong>{s.attendance}%</strong><small>Kehadiran</small></div></div><div className="unit-score"><span>Capaian akademik</span><strong>{s.average}/100</strong></div><div className="progress-track"><i style={{width:s.average+'%'}}/></div><Button variant="secondary" className="full-width" onClick={()=>setRole('principal',s.id)}>Buka command center <ArrowUpRight size={16}/></Button></Panel>)}</div>{user.role==='superadmin'&&<Panel title="Pemantauan sumber daya" subtitle="Metrik kapasitas demonstrasi untuk memperagakan tata kelola platform."><div className="usage-grid">{[['Database','24 MB / 500 MB',5],['Penyimpanan','2 MB / 1 GB',1],['Pembuatan PDF','Kuota demo tersedia',8],['Notifikasi','Simulasi lokal',0]].map(([name,label,value])=><div key={String(name)}><span className="heading-icon teal"><Cloud size={21}/></span><h3>{name}</h3><p>{label}</p><div className="progress-track"><i style={{width:value+'%'}}/></div><Badge tone="green">Normal</Badge></div>)}</div><div className="callout blue">Metrik di atas adalah contoh kapasitas demo, bukan pengukuran infrastruktur produksi.</div></Panel>}</>;}
-export function Admissions(){const {data,user,save}=useApp();const [filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[form,setForm]=useState<Partial<Row>|null>(null);const rows=data.admissions.filter(a=>(filter==='all'||a.status===filter)&&a.name.toLowerCase().includes(query.toLowerCase()));return <><PageHead eyebrow="AWAL PERJALANAN BARU" title="Penerimaan siswa baru" description="Kelola pendaftaran, verifikasi, dan hasil seleksi calon siswa." action={user.role==='admin'?<Button onClick={()=>setForm({status:'Verifikasi'})}><Plus size={16}/>Daftarkan calon siswa</Button>:undefined}/><div className="metrics three">{['Verifikasi','Seleksi','Diterima'].map((s,i)=><Metric key={s} label={s} value={data.admissions.filter(a=>a.status===s).length} icon={[FileSpreadsheet,Users,GraduationCap][i]} tone={['amber','blue','teal'][i]} note="calon siswa"/>)}</div><Panel title="Daftar calon siswa"><div className="table-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Cari nama calon siswa…"/><select aria-label="Status pendaftaran" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">Semua status</option>{['Verifikasi','Seleksi','Diterima','Tidak diterima'].map(s=><option key={s}>{s}</option>)}</select></div><div className="table-scroll"><table><thead><tr><th>Calon siswa</th><th>Asal sekolah</th><th>Orang tua</th><th>Status</th><th/></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><strong>{a.name}</strong><small className="cell-small">NISN {a.nisn}</small></td><td>{a.previousSchool}</td><td>{a.parent}<small className="cell-small">{a.phone}</small></td><td><Badge tone={tone(a.status)}>{a.status}</Badge></td><td>{user.role==='admin'&&<Button variant="ghost" onClick={()=>setForm(a)}>Tinjau pendaftaran</Button>}</td></tr>)}</tbody></table></div>{!rows.length&&<Empty/>}</Panel>{form&&<FormModal title={form.id?'Tinjau pendaftaran':'Pendaftaran calon siswa'} initial={form} fields={[{key:'name',label:'Nama lengkap',required:true},{key:'nisn',label:'NISN',required:true},{key:'previousSchool',label:'Asal sekolah',required:true},{key:'parent',label:'Nama orang tua',required:true},{key:'phone',label:'Telepon',type:'tel',required:true},{key:'status',label:'Status pendaftaran',required:true,options:['Verifikasi','Seleksi','Diterima','Tidak diterima'].map(x=>({value:x,label:x}))}]} onClose={()=>setForm(null)} onSave={v=>save('admissions',{...v,date:v.date||new Date().toISOString()})}/>}</>;}
+export function Foundation() {
+  const { overview } = useApp();
+  return (
+    <>
+      <PageHead
+        eyebrow="SATU VISI, BANYAK RUANG TUMBUH"
+        title="Ringkasan yayasan"
+        description="Pantau capaian dan operasional seluruh unit melalui data agregat."
+      />
+      <div className="metrics four">
+        <Metric label="Unit sekolah" value={overview.length} icon={Building2} />
+        <Metric
+          label="Total siswa"
+          value={overview.reduce((a, s) => a + s.students, 0)}
+          icon={Users}
+        />
+        <Metric
+          label="Rata-rata kehadiran"
+          value={`${avg(overview.map((s) => s.attendance))}%`}
+          icon={CheckCircle2}
+          tone="blue"
+        />
+        <Metric
+          label="Rata-rata nilai"
+          value={avg(overview.map((s) => s.average))}
+          icon={TrendingUp}
+          tone="amber"
+        />
+      </div>
+      <div className="card-grid">
+        {overview.map((s, i) => (
+          <Panel key={s.id}>
+            <div className="school-unit-top">
+              <span className={`unit-symbol color-${i}`}>{s.short}</span>
+              <Badge tone="green">Aktif</Badge>
+            </div>
+            <div className="eyebrow">{s.city}</div>
+            <h3 className="card-title">{s.name}</h3>
+            <div className="unit-stats">
+              <div>
+                <strong>{s.students}</strong>
+                <small>Siswa</small>
+              </div>
+              <div>
+                <strong>{s.teachers}</strong>
+                <small>Guru</small>
+              </div>
+              <div>
+                <strong>{s.attendance}%</strong>
+                <small>Kehadiran</small>
+              </div>
+            </div>
+            <div className="operation-detail">
+              <p>
+                Rata-rata nilai <strong>{s.average}/100</strong>
+              </p>
+              <p>
+                Rapor terbit <strong>{s.reportsPublished}</strong>
+              </p>
+              <p>
+                Tagihan <strong>{currency(s.invoiceTotal)}</strong>
+              </p>
+              <p>
+                Penerimaan <strong>{currency(s.paidTotal)}</strong>
+              </p>
+            </div>
+          </Panel>
+        ))}
+      </div>
+    </>
+  );
+}
+export function AdminDashboard() {
+  const { data, go } = useApp();
+  const incomplete = data.students.filter(
+      (s) => !s.phone || !s.parent || !s.address,
+    ),
+    open = data.invoices.filter((i) => i.status !== "Lunas");
+  return (
+    <>
+      <PageHead
+        eyebrow="ADMINISTRASI YANG TERTATA"
+        title="Selamat datang, Bu Dewi"
+        description="Kelola data sekolah, presensi guru, dan pencatatan keuangan."
+        action={
+          <Button onClick={() => go("master")}>
+            <Plus size={16} />
+            Kelola data sekolah
+          </Button>
+        }
+      />
+      <div className="metrics four">
+        <Metric
+          label="Siswa aktif"
+          value={data.students.length}
+          icon={Users}
+          onClick={() => go("students")}
+        />
+        <Metric
+          label="Guru & staf"
+          value={data.teachers.length}
+          icon={GraduationCap}
+          tone="blue"
+          onClick={() => go("master")}
+        />
+        <Metric
+          label="Data perlu dilengkapi"
+          value={incomplete.length}
+          icon={ClipboardIcon}
+          tone="amber"
+          onClick={() => go("students")}
+        />
+        <Metric
+          label="Tagihan belum lunas"
+          value={open.length}
+          icon={Wallet}
+          tone="purple"
+          onClick={() => go("finance")}
+        />
+      </div>
+      <div className="dashboard-grid">
+        <Panel title="Pusat administrasi">
+          <div className="admin-shortcuts">
+            {[
+              ["master", "Data sekolah & impor Excel"],
+              ["staff-attendance", "Catat absensi guru"],
+              ["finance", "Tagihan & penerimaan SPP"],
+              ["uniform", "Jadwal seragam"],
+              ["schedule", "Jadwal pelajaran"],
+              ["pickup", "Antar & jemput siswa"],
+            ].map(([id, label]) => (
+              <Button key={id} variant="secondary" onClick={() => go(id)}>
+                {label}
+                <ArrowRight size={16} />
+              </Button>
+            ))}
+          </div>
+        </Panel>
+        <Panel
+          title="Kelengkapan data siswa"
+          subtitle="Periksa kontak wali dan alamat untuk administrasi sekolah."
+        >
+          {incomplete.slice(0, 6).map((s) => (
+            <button
+              className="admin-issue"
+              key={s.id}
+              onClick={() => go("students", s.id)}
+            >
+              <strong>{s.name}</strong>
+              <span>
+                {[
+                  !s.phone && "Telepon",
+                  !s.parent && "Wali",
+                  !s.address && "Alamat",
+                ]
+                  .filter(Boolean)
+                  .join(", ")}{" "}
+                belum terisi
+              </span>
+              <ChevronRight size={16} />
+            </button>
+          ))}
+          {!incomplete.length && <Empty title="Data administrasi lengkap" />}
+          <Button variant="ghost" onClick={() => go("students")}>
+            Periksa semua siswa
+            <ArrowRight size={15} />
+          </Button>
+        </Panel>
+      </div>
+      <Panel title="Kabar sekolah">
+        {data.announcements.slice(0, 3).map((a) => (
+          <button
+            className="admin-issue"
+            key={a.id}
+            onClick={() => go("announcements")}
+          >
+            <strong>{a.title}</strong>
+            <small>{date(a.date, true)}</small>
+            <ChevronRight size={16} />
+          </button>
+        ))}
+      </Panel>
+    </>
+  );
+}
+const ClipboardIcon = FileSpreadsheet;
 
-export function Pricing(){const {save,toast}=useApp();const [capacity,setCapacity]=useState(500),[teachers,setTeachers]=useState(24),[hours,setHours]=useState(5),[weeks,setWeeks]=useState(40),[lead,setLead]=useState<string|undefined>();const prices:Record<number,number[]>={200:[3500000,7500000],500:[5500000,10000000],1000:[8500000,15000000],2000:[14000000,24000000]};return <><PageHead eyebrow="INVESTASI UNTUK RUANG TUMBUH YANG LEBIH BAIK" title="Paket untuk setiap tahap sekolah" description="Mulai dari administrasi yang rapi, hingga pendampingan yang lebih personal."/><div className="pricing-selector"><span>Kapasitas siswa</span><div>{[200,500,1000,2000].map(n=><button className={capacity===n?'active':''} onClick={()=>setCapacity(n)} key={n}>{number(n)} siswa</button>)}</div><Badge tone="green">Lisensi tahunan</Badge></div><div className="pricing-grid">{['Standard','Pro'].map((plan,i)=><Panel key={plan} className={i?'pro-plan':''}>{i>0&&<div className="recommended"><Sparkles size={15}/> LEBIH DARI SEKADAR ADMINISTRASI</div>}<div className="plan-head"><span className={`heading-icon ${i?'teal':'blue'}`}>{i?<Sparkles size={22}/>:<Layers size={22}/>}</span><h2>{plan}</h2><p>{i?'Pahami lebih dalam. Dampingi lebih tepat.':'Fondasi akademik yang rapi dan terhubung.'}</p></div><div className="plan-price"><strong>{currency(prices[capacity][i])}</strong><span>/ tahun</span><small>Setara {currency(prices[capacity][i]/12)}/bulan · {currency(prices[capacity][i]/capacity)}/siswa/tahun</small></div><Button variant={i?'primary':'secondary'} className="full-width" onClick={()=>setLead(plan)}>Diskusikan kebutuhan sekolah <ArrowRight size={16}/></Button><ul className="plan-features">{(i?['Semua fitur Standard','Student 360 & Early Warning','Command Center kepala sekolah','Smart Report & Parent Insight','Pendampingan & evaluasi siswa','Kuis online & tugas lanjutan','Keuangan & pembayaran SPP','Dashboard yayasan & integrasi']:['Data siswa, guru, kelas, & mapel','Kehadiran & input nilai','Tugas & PR dasar','Rapor digital & PDF massal','Portal siswa & orang tua','Pengumuman sekolah','Impor Excel dengan pemetaan','Template & branding sekolah']).map(f=><li key={f}><CheckCircle2 size={16}/>{f}</li>)}</ul></Panel>)}</div><Panel title="Berapa banyak waktu yang bisa kembali untuk mengajar?" subtitle="Kalkulator estimasi efisiensi administrasi"><div className="roi-grid"><div className="form-grid">{[['Jumlah guru',teachers,setTeachers,1,500],['Jam administrasi / minggu',hours,setHours,1,40],['Minggu efektif / tahun',weeks,setWeeks,1,52]].map(([label,value,set,min,max])=><label key={String(label)}>{String(label)}<input type="number" min={Number(min)} max={Number(max)} value={Number(value)} onChange={e=>(set as (v:number)=>void)(Math.max(Number(min),Math.min(Number(max),Number(e.target.value))))}/></label>)}</div><div className="roi-result"><Sparkles size={24}/><span>Potensi waktu yang dihemat / tahun</span><strong>{number(teachers*hours*weeks*.4)} <small>jam</small></strong><p>Dari {number(teachers*hours*weeks)} jam administrasi. Asumsi efisiensi 40%; estimasi, bukan jaminan penghematan.</p></div></div></Panel>{lead&&<FormModal title={`Diskusikan KabarKelas ${lead}`} initial={{plan:lead,students:capacity}} fields={[{key:'name',label:'Nama lengkap',required:true},{key:'school',label:'Nama sekolah',required:true},{key:'position',label:'Jabatan',required:true},{key:'students',label:'Jumlah siswa',type:'number',min:1,required:true},{key:'phone',label:'WhatsApp',type:'tel',required:true},{key:'email',label:'Email',type:'email',required:true}]} onClose={()=>setLead(undefined)} label="Simpan permintaan demo" onSave={async v=>{await save('leads',{...v,plan:lead,date:new Date().toISOString()});toast('Permintaan tersimpan dalam demo. Belum dikirim ke tim penjualan.');}}/>}</>;}
+export function Admissions() {
+  const { data, user, save } = useApp();
+  const [filter, setFilter] = useState("all"),
+    [query, setQuery] = useState(""),
+    [form, setForm] = useState<Partial<Row> | null>(null);
+  const rows = data.admissions.filter(
+    (a) =>
+      (filter === "all" || a.status === filter) &&
+      a.name.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <>
+      <PageHead
+        eyebrow="AWAL PERJALANAN BARU"
+        title="Penerimaan siswa baru"
+        description="Kelola pendaftaran, verifikasi, dan hasil seleksi calon siswa."
+        action={
+          user.role === "admin" ? (
+            <Button onClick={() => setForm({ status: "Verifikasi" })}>
+              <Plus size={16} />
+              Daftarkan calon siswa
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className="metrics three">
+        {["Verifikasi", "Seleksi", "Diterima"].map((s, i) => (
+          <Metric
+            key={s}
+            label={s}
+            value={data.admissions.filter((a) => a.status === s).length}
+            icon={[FileSpreadsheet, Users, GraduationCap][i]}
+            tone={["amber", "blue", "teal"][i]}
+            note="calon siswa"
+          />
+        ))}
+      </div>
+      <Panel title="Daftar calon siswa">
+        <div className="table-toolbar">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            placeholder="Cari nama calon siswa…"
+          />
+          <select
+            aria-label="Status pendaftaran"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">Semua status</option>
+            {["Verifikasi", "Seleksi", "Diterima", "Tidak diterima"].map(
+              (s) => (
+                <option key={s}>{s}</option>
+              ),
+            )}
+          </select>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Calon siswa</th>
+                <th>Asal sekolah</th>
+                <th>Orang tua</th>
+                <th>Status</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <strong>{a.name}</strong>
+                    <small className="cell-small">NISN {a.nisn}</small>
+                  </td>
+                  <td>{a.previousSchool}</td>
+                  <td>
+                    {a.parent}
+                    <small className="cell-small">{a.phone}</small>
+                  </td>
+                  <td>
+                    <Badge tone={tone(a.status)}>{a.status}</Badge>
+                  </td>
+                  <td>
+                    {user.role === "admin" && (
+                      <Button variant="ghost" onClick={() => setForm(a)}>
+                        Tinjau pendaftaran
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!rows.length && <Empty />}
+      </Panel>
+      {form && (
+        <FormModal
+          title={form.id ? "Tinjau pendaftaran" : "Pendaftaran calon siswa"}
+          initial={form}
+          fields={[
+            { key: "name", label: "Nama lengkap", required: true },
+            { key: "nisn", label: "NISN", required: true },
+            { key: "previousSchool", label: "Asal sekolah", required: true },
+            { key: "parent", label: "Nama orang tua", required: true },
+            { key: "phone", label: "Telepon", type: "tel", required: true },
+            {
+              key: "status",
+              label: "Status pendaftaran",
+              required: true,
+              options: [
+                "Verifikasi",
+                "Seleksi",
+                "Diterima",
+                "Tidak diterima",
+              ].map((x) => ({ value: x, label: x })),
+            },
+          ]}
+          onClose={() => setForm(null)}
+          onSave={(v) =>
+            save("admissions", {
+              ...v,
+              date: v.date || new Date().toISOString(),
+            })
+          }
+        />
+      )}
+    </>
+  );
+}

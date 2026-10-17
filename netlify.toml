@@ -9,7 +9,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["express", "serverless-http", "@netlify/blobs", "jspdf", "jszip"]
+  external_node_modules = ["express", "serverless-http", "@netlify/blobs"]
 
 [[redirects]]
   from = "/api/*"
