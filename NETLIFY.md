@@ -1,10 +1,14 @@
 # Deploy KabarKelas dari Git
 
+Situs produksi: https://kabarkelas-demo.netlify.app/.
+
 1. Import repository `desainindongmas/kabarkelas-demo` di Netlify, branch `main`, base directory kosong.
 2. Gunakan konfigurasi `netlify.toml`: build `npm run build`, publish `dist`, functions `netlify/functions`, Node.js 24 dan `AWS_LAMBDA_JS_RUNTIME=nodejs24.x`.
 3. Deploy. Function `api` harus terpasang. Blobs store `kabarkelas-demo-v1` dibuat melalui identitas situs yang disediakan Netlify. Tidak perlu menyalin API key ke frontend atau repository.
 
 ## Pemeriksaan
+
+Sebelum publish dari environment yang pernah dipakai sebelumnya, sinkronkan checkout dengan `main` di GitHub. Setelah push, cocokkan SHA commit pada deploy Netlify dengan commit terbaru di GitHub; referensi lokal yang belum di-fetch dapat masih menunjuk versi lama. Push berhasil belum membuktikan build dan publikasi di Netlify selesai.
 
 - Buka situs HTTPS: dashboard akademik dan EWS tampil, lalu coba **Ganti peran**.
 - Admin melihat dashboard administrasi tanpa menu EWS/nilai siswa. Guru + wali kelas memiliki akses tambahan khusus X IPA 1. Security hanya memiliki dashboard, pemindai QR, riwayat dan konfirmasi gerbang.
