@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { isPro } from "./shared/access.mjs";
+import { isPro, isFoundation } from "./shared/access.mjs";
 export function installProductAPI({
   app,
   all,
@@ -13,6 +13,7 @@ export function installProductAPI({
   audit,
   today,
   validDate,
+  setDemoPlan,
 }) {
   const settings = (user) => all(user.school, "settings")[0];
   const requirePro = (user) => {
@@ -20,6 +21,10 @@ export function installProductAPI({
       deny(
         "Fitur ini tersedia pada paket Pro sekolah. Paket Standard tetap menyediakan pekerjaan harian lengkap.",
       );
+  };
+  const requireFoundation = (user) => {
+    if (!isFoundation(settings(user)))
+      deny("Pengelolaan lintas unit tersedia pada paket Yayasan.");
   };
   const ensure = (role, allowed) => {
     if (!allowed.includes(role)) deny();
@@ -33,6 +38,9 @@ export function installProductAPI({
   };
   const schoolSummary = (s) => {
     const pupils = all(s.id, "students"),
+      config = all(s.id, "settings")[0] || {},
+      grades = all(s.id, "grades"),
+      interventions = all(s.id, "interventions"),
       reports = all(s.id, "reports"),
       invoices = all(s.id, "invoices"),
       target = all(s.id, "schoolTargets")[0] || {},
@@ -102,6 +110,41 @@ export function installProductAPI({
         value: collectionRate,
         target: target.collectionRate || 85,
       });
+    const riskCounts = { high: 0, medium: 0, low: 0 };
+    const belowKkm = new Set(
+      grades
+        .filter((grade) => grade.score < (config.kkm || 75))
+        .map((grade) => grade.studentId),
+    );
+    for (const pupil of pupils) {
+      const drop = (pupil.history?.[0] || 0) - (pupil.history?.at(-1) || 0);
+      const indicators = [
+        pupil.attendance < (config.ewsAttendance || 80),
+        drop > (config.ewsDrop || 10),
+        pupil.overdue >= (config.ewsOverdue || 3),
+        belowKkm.has(pupil.id),
+      ].filter(Boolean).length;
+      riskCounts[indicators >= 3 ? "high" : indicators ? "medium" : "low"]++;
+    }
+    const handlingSummary = {
+      total: interventions.length,
+      open: interventions.filter((item) => item.status !== "Selesai").length,
+      overdue: interventions.filter(
+        (item) => item.status !== "Selesai" && item.due < today(),
+      ).length,
+      evaluated: interventions.filter(
+        (item) => item.status === "Selesai" && item.outcome,
+      ).length,
+      improved: interventions.filter(
+        (item) => item.status === "Selesai" && item.outcome === "Membaik",
+      ).length,
+      needsFollowup: interventions.filter(
+        (item) => item.status === "Selesai" && item.outcome === "Perlu lanjutan",
+      ).length,
+      unchanged: interventions.filter(
+        (item) => item.status === "Selesai" && item.outcome === "Belum berubah",
+      ).length,
+    };
     return {
       ...s,
       staleDays: latest
@@ -125,6 +168,8 @@ export function installProductAPI({
       issues,
       openTasks: openTasks.length,
       overdueTasks: openTasks.filter((t) => t.due < today()).length,
+      riskCounts,
+      handlingSummary,
       period:
         all(s.id, "settings")[0]?.year +
         " · " +
@@ -141,12 +186,14 @@ export function installProductAPI({
   });
   app.get("/api/board", (req, res) => {
     ensure(req.user.role, ["foundation"]);
+    requireFoundation(req.user);
     res.json(board());
   });
   app.post("/api/foundation-tasks", (req, res) => {
     const u = req.user,
       b = req.body;
     ensure(u.role, ["foundation", "principal"]);
+    requireFoundation(u);
     const school = u.role === "foundation" ? b.schoolId : u.school;
     if (!schools.some((s) => s.id === school))
       invalid("Pilih unit yang valid.");
@@ -207,6 +254,7 @@ export function installProductAPI({
     const u = req.user,
       b = req.body;
     ensure(u.role, ["principal", "foundation"]);
+    requireFoundation(u);
     const school = u.role === "foundation" ? b.schoolId : u.school;
     if (!schools.some((s) => s.id === school)) invalid("Unit tidak valid.");
     const old = b.id && all(school, "unitNeeds").find((r) => r.id === b.id);
@@ -272,6 +320,7 @@ export function installProductAPI({
     const u = req.user,
       b = req.body;
     ensure(u.role, ["foundation"]);
+    requireFoundation(u);
     if (!schools.some((s) => s.id === b.schoolId)) invalid("Unit tidak valid.");
     const item = { id: `${b.schoolId}-target` };
     for (const key of ["attendance", "reportRate", "collectionRate"]) {
@@ -289,11 +338,8 @@ export function installProductAPI({
   });
   app.post("/api/demo-plan", (req, res) => {
     const u = req.user;
-    ensure(u.role, ["admin", "principal"]);
-    if (!["Standard", "Pro"].includes(req.body.plan))
-      invalid("Paket tidak valid.");
-    const old = settings(u);
-    put("settings", u.school, { ...old, plan: req.body.plan });
+    ensure(u.role, ["admin", "principal", "foundation"]);
+    setDemoPlan(req.body.plan);
     audit(u, "Mencoba paket demo " + req.body.plan);
     res.json({ plan: req.body.plan, demo: true });
   });

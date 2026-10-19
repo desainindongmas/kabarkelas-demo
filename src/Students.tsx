@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowDown,
@@ -75,6 +75,7 @@ import { api } from "./App";
 import { exportExcel, reportPDF } from "./export";
 export function Students() {
   const { data, user, go, save, remove, toast } = useApp();
+  const pro = isPro(data.settings[0]);
   const [query, setQuery] = useState(""),
     [cls, setCls] = useState("all"),
     [level, setLevel] = useState("all"),
@@ -86,7 +87,7 @@ export function Students() {
       (cls === "all" || s.classId === cls) &&
       (s.name.toLowerCase().includes(query.toLowerCase()) ||
         s.nisn.includes(query)) &&
-      (level === "all" || risk(s, data).level === level),
+      (!pro || level === "all" || risk(s, data).level === level),
   );
   return (
     <>
@@ -104,8 +105,8 @@ export function Students() {
                     NISN: s.nisn,
                     Kelas: data.classes.find((c) => c.id === s.classId)?.name,
                     Kehadiran: s.attendance + "%",
-                    Nilai: risk(s, data).score,
-                    Risiko: risk(s, data).level,
+                    Nilai: avg(data.grades.filter((g) => g.studentId === s.id).map((g) => g.score)),
+                    ...(pro ? {Risiko: risk(s, data).level} : {}),
                   })),
                   "Data-Siswa-KabarKelas",
                 )
@@ -127,7 +128,7 @@ export function Students() {
           icon={Users}
           note="dalam sekolah ini"
         />
-        <Metric
+        {pro ? <Metric
           label="Perlu pendampingan"
           value={
             data.students.filter((s) => risk(s, data).level !== "Rendah").length
@@ -135,7 +136,7 @@ export function Students() {
           icon={Activity}
           tone="amber"
           note="terdeteksi melalui Early Warning"
-        />
+        /> : <Metric label="Kelas aktif" value={data.classes.length} icon={BookOpen} tone="blue" note="untuk kegiatan belajar" />}
         <Metric
           label="Rata-rata kehadiran"
           value={`${avg(data.students.map((s) => s.attendance))}%`}
@@ -162,7 +163,7 @@ export function Students() {
                 setPage(1);
               }}
             />
-            <select
+            {pro && <select
               aria-label="Filter tingkat risiko"
               value={level}
               onChange={(e) => {
@@ -174,7 +175,7 @@ export function Students() {
               {["Tinggi", "Sedang", "Rendah"].map((l) => (
                 <option key={l}>{l}</option>
               ))}
-            </select>
+            </select>}
           </div>
         </div>
         <div className="table-scroll">
@@ -185,13 +186,14 @@ export function Students() {
                 <th>Kelas</th>
                 <th>Rata-rata nilai</th>
                 <th>Kehadiran</th>
-                <th>Status</th>
+                {pro && <th>Status risiko</th>}
                 <th />
               </tr>
             </thead>
             <tbody>
               {rows.slice((page - 1) * 12, page * 12).map((s) => {
-                const r = risk(s, data);
+                const r = pro ? risk(s, data) : null;
+                const score = avg(data.grades.filter((g) => g.studentId === s.id).map((g) => g.score));
                 return (
                   <tr
                     key={s.id}
@@ -211,7 +213,7 @@ export function Students() {
                       {data.classes.find((c) => c.id === s.classId)?.name}
                     </td>
                     <td>
-                      <strong>{r.score}</strong>
+                      <strong>{score}</strong>
                       <span className="muted"> /100</span>
                     </td>
                     <td>
@@ -228,7 +230,7 @@ export function Students() {
                         </div>
                       </div>
                     </td>
-                    <td>
+                    {r && <td>
                       <Badge
                         tone={r.level === "Rendah" ? "green" : tone(r.level)}
                       >
@@ -236,7 +238,7 @@ export function Students() {
                           ? "Berkembang baik"
                           : `Risiko ${r.level.toLowerCase()}`}
                       </Badge>
-                    </td>
+                    </td>}
                     <td>
                       <ArrowUpRight size={17} />
                     </td>
@@ -320,6 +322,7 @@ export function InterventionForm({
   initial?: Row;
 }) {
   const { data, save } = useApp();
+  if (!isPro(data.settings[0])) return null;
   return (
     <FormModal
       title={initial ? "Perbarui pendampingan" : "Rencanakan pendampingan"}
@@ -397,6 +400,7 @@ export function EarlyWarning() {
     [page, setPage] = useState(1),
     [intervene, setIntervene] = useState(""),
     [rules, setRules] = useState(false);
+  if (!isPro(data.settings[0])) return <Empty title="EWS tersedia pada Pro dan Yayasan" description="Kegiatan sekolah tetap dapat dikelola melalui nilai, kehadiran, tugas, dan rapor." />;
   const rows = data.students
     .map(
       (s) => ({ ...s, ...risk(s, data) }) as typeof s & ReturnType<typeof risk>,
@@ -441,6 +445,7 @@ export function EarlyWarning() {
             Indikator membantu menentukan prioritas. Pertimbangkan kondisi dan
             cerita setiap siswa sebelum mengambil tindakan.
           </p>
+          <p><strong>Alurnya:</strong> Risiko terdeteksi → telusuri bukti nilai, kehadiran, dan tugas → tetapkan PIC serta tenggat → evaluasi hasil pendampingan.</p>
         </div>
         <Badge tone="amber">Otomatis dari data</Badge>
       </div>
@@ -587,13 +592,14 @@ export function EarlyWarning() {
                     )}
                   </td>
                   <td>
-                    <button
-                      className="icon-btn"
-                      aria-label={`Lihat profil ${s.name}`}
+                    <Button
+                      variant="ghost"
+                      aria-label={`Lihat bukti ${s.name}`}
                       onClick={() => go("students", s.id)}
                     >
+                      Lihat bukti
                       <ArrowUpRight size={17} />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -658,12 +664,16 @@ export function EarlyWarning() {
 }
 export function StudentDetail() {
   const { selectedId, data, user, go, save, remove, school, toast } = useApp();
+  const pro = isPro(data.settings[0]);
   const student = data.students.find((s) => s.id === selectedId);
   const [tab, setTab] = useState("Ringkasan"),
     [intervene, setIntervene] = useState(false),
     [editInter, setEditInter] = useState<Row | undefined>(),
     [note, setNote] = useState(false),
     [del, setDel] = useState(false);
+  useEffect(() => {
+    if (!pro && tab === "Pendampingan") setTab("Ringkasan");
+  }, [pro, tab]);
   if (!student)
     return (
       <Empty
@@ -677,11 +687,14 @@ export function StudentDetail() {
   const s = student,
     r = risk(s, data),
     grades = data.grades.filter((g) => g.studentId === s.id),
-    interventions = data.interventions.filter((i) => i.studentId === s.id),
+    interventions = pro ? data.interventions.filter((i) => i.studentId === s.id) : [],
     attendance = data.attendance.filter((a) => a.studentId === s.id),
     report = data.reports.find((a) => a.studentId === s.id),
     submissions = data.submissions.filter((a) => a.studentId === s.id),
     assignments = data.assignments.filter((a) => a.classId === s.classId);
+  const pendingTasks = assignments.filter(
+    (a) => !submissions.some((submission) => submission.assignmentId === a.id),
+  );
   const trend = ["Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
     .slice(0, 4)
     .map((month, i) => ({ month, Nilai: s.history?.[i] || 0 }));
@@ -711,7 +724,7 @@ export function StudentDetail() {
           </Button>
         </div>
       </div>
-      <div
+      {pro && <div
         className={`student-ews ${r.level === "Rendah" ? "healthy" : r.level === "Tinggi" ? "risk-high" : "risk-medium"}`}
       >
         <div className="ews-title">
@@ -755,13 +768,13 @@ export function StudentDetail() {
               )}
           </div>
         )}
-      </div>
+      </div>}
       <div className="metrics four compact">
         <Metric
           label="Rata-rata nilai"
           value={
             <>
-              {r.score}
+              {avg(grades.map((g) => g.score))}
               <em>/100</em>
             </>
           }
@@ -777,18 +790,18 @@ export function StudentDetail() {
         />
         <Metric
           label="Tugas tertunda"
-          value={s.overdue}
+          value={pendingTasks.length}
           icon={Clock3}
           tone="amber"
           note="perlu diselesaikan"
         />
-        <Metric
+        {pro ? <Metric
           label="Pendampingan aktif"
           value={interventions.filter((i) => i.status !== "Selesai").length}
           icon={ShieldCheck}
           tone="purple"
           note="bersama guru & wali kelas"
-        />
+        /> : <Metric label="Mata pelajaran" value={grades.length} icon={FileCheck2} tone="purple" note="dengan nilai tercatat" />}
       </div>
       <div className="tabs">
         {[
@@ -801,7 +814,7 @@ export function StudentDetail() {
         ]
           .filter(
             (t) =>
-              (t !== "Pendampingan" || canIntervene(user)) &&
+              (t !== "Pendampingan" || (pro && canIntervene(user))) &&
               (t !== "Profil" || user.role !== "teacher" || user.isHomeroom),
           )
           .map((t) => (
@@ -816,7 +829,7 @@ export function StudentDetail() {
       </div>
       {tab === "Ringkasan" && (
         <>
-          <div className="student-grid">
+          {pro ? <div className="student-grid">
             <Panel
               title="Perjalanan akademik"
               subtitle="Rata-rata nilai dari waktu ke waktu"
@@ -895,7 +908,10 @@ export function StudentDetail() {
                 </small>
               </div>
             </Panel>
-          </div>
+          </div> : <Panel title="Ringkasan belajar" subtitle="Nilai, kehadiran, dan tugas yang telah dicatat.">
+            <p className="card-copy">{s.name.split(" ")[0]} memiliki {grades.length} mata pelajaran dengan rata-rata nilai {avg(grades.map((g) => g.score))}/100. Kehadiran tercatat {s.attendance}% dan {pendingTasks.length} tugas belum selesai.</p>
+            <div className="operation-actions"><Button variant="secondary" onClick={() => setTab("Akademik")}>Lihat nilai</Button><Button variant="secondary" onClick={() => setTab("Tugas")}>Buka tugas</Button></div>
+          </Panel>}
           <div className="student-grid">
             <Panel
               title="Peta kompetensi"
@@ -1058,7 +1074,7 @@ export function StudentDetail() {
           })}
         </div>
       )}
-      {tab === "Pendampingan" && (
+      {pro && tab === "Pendampingan" && canIntervene(user) && (
         <Panel
           title="Rencana & hasil pendampingan"
           action={
@@ -1084,8 +1100,10 @@ export function StudentDetail() {
                   <h3>{i.title}</h3>
                   <p>{i.note}</p>
                   <small>
-                    {i.pic} <span>•</span> Evaluasi {date(i.due)}
+                    PIC: {i.pic} <span>•</span> Tenggat evaluasi {date(i.due)}
                   </small>
+                  <p><strong>Target:</strong> {i.expectedOutcome || "Belum dicatat"}</p>
+                  {i.status === "Selesai" && <div className="evaluation-result"><Badge tone={i.outcome === "Membaik" ? "green" : "amber"}>{i.outcome || "Sudah dievaluasi"}</Badge><p>{i.evaluationNote || "Belum ada catatan evaluasi"}</p><small>Kehadiran {i.baselineAttendance ?? "—"}% → {i.afterAttendance ?? "—"}% · Nilai {i.baselineScore ?? "—"} → {i.afterScore ?? "—"} · Tugas tertunda {i.baselineOverdue ?? "—"} → {i.afterOverdue ?? "—"}</small></div>}
                 </div>
                 {canIntervene(user) &&
                   (user.role !== "teacher" ||
@@ -1132,13 +1150,13 @@ export function StudentDetail() {
           </div>
         </Panel>
       )}
-      {intervene && (
+      {pro && intervene && (
         <InterventionForm
           studentId={s.id}
           onClose={() => setIntervene(false)}
         />
       )}{" "}
-      {editInter && (
+      {pro && editInter && (
         <InterventionForm
           studentId={s.id}
           initial={editInter}
@@ -1199,6 +1217,7 @@ export function Interventions() {
     [edit, setEdit] = useState<Row | undefined>(),
     [add, setAdd] = useState(false),
     [student, setStudent] = useState(data.students[0]?.id || "");
+  if (!isPro(data.settings[0])) return <Empty title="Pendampingan EWS tersedia pada Pro dan Yayasan" description="Gunakan kehadiran, nilai, tugas, dan rapor untuk kegiatan sekolah sehari-hari." />;
   const rows = data.interventions.filter(
     (i) =>
       (filter === "all" || i.status === filter) &&

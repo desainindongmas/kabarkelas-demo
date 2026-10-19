@@ -45,11 +45,11 @@ const stop = () =>
     server.once("exit", resolve);
     server.kill();
   });
-async function login(role = "admin", school = "s1", isHomeroom = false) {
+async function login(role = "admin", school = "s1", isHomeroom = false, plan) {
   const r = await fetch(base + "/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role, school, isHomeroom }),
+    body: JSON.stringify({ role, school, isHomeroom, ...(plan ? { plan } : {}) }),
   });
   assert.equal(r.status, 200);
   return r.headers.get("set-cookie").split(";")[0];
@@ -109,7 +109,7 @@ test("startup shows the service error, stops the spinner, and can recover after 
 test("demo data covers three schools, and unauthenticated access is rejected", async () => {
   const r = await fetch(base + "/api/bootstrap");
   assert.equal(r.status, 401);
-  const cookie = await login("foundation");
+  const cookie = await login("foundation", "s1", false, "Yayasan");
   const { body } = await request(cookie, "/api/bootstrap");
   assert.equal(body.overview.length, 3);
   assert.equal(
@@ -489,7 +489,11 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
   };
   for (const [role, routes] of Object.entries(screens)) {
     await context.request.post(base + "/api/session", {
-      data: { role, isHomeroom: role === "teacher" },
+      data: {
+        role,
+        isHomeroom: role === "teacher",
+        plan: ["principal", "foundation"].includes(role) ? "Yayasan" : "Pro",
+      },
     });
     await page.goto(base);
     await page.reload();
@@ -611,7 +615,8 @@ test("browser role switch, assignment submission, timed quiz, PDF download and p
     .getByRole("button", { name: /Wali Murid Ikuti perkembangan/ })
     .click();
   await p.locator(".personal-profile").waitFor();
-  assert.match(await p.locator("h1").innerText(), /Ibu Dian/);
+  const parentBootstrap = await (await context.request.get(base + "/api/bootstrap")).json();
+  assert.ok((await p.locator("h1").innerText()).includes(parentBootstrap.data.students[0].parent));
   await p.screenshot({
     path: "test-results/parent-portal.png",
     fullPage: true,
@@ -678,7 +683,7 @@ test("seven primary roles and academic capabilities are enforced in API payloads
   const { body: p } = await request(parent, "/api/bootstrap");
   assert.equal(p.data.quizzes.length, 0);
   assert.ok(p.data.reports.every((r) => r.status === "Terbit"));
-  const foundation = await login("foundation");
+  const foundation = await login("foundation", "s1", false, "Yayasan");
   const { body: f } = await request(foundation, "/api/bootstrap");
   for (const kind of [
     "students",
@@ -1063,6 +1068,7 @@ test("welcome selects a role and guided tour advances only after a successful ac
   await page.goto(base);
   const welcome = page.getByRole("dialog", { name: "Pilih pengalaman demo" });
   await welcome.waitFor();
+  await welcome.getByLabel("Paket demo awal").selectOption("Standard");
   await page.screenshot({
     path: "test-results/demo-welcome.png",
     fullPage: false,
@@ -1070,6 +1076,8 @@ test("welcome selects a role and guided tour advances only after a successful ac
   });
   await welcome.getByRole("button", { name: /Security Pindai QR/ }).click();
   await welcome.waitFor({ state: "hidden" });
+  await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+  assert.equal(await page.getByLabel("Ganti paket demo").count(), 0);
   const tour = page.getByLabel("Panduan skenario demo");
   await tour.waitFor();
   assert.match(await tour.innerText(), /1\/3/);
@@ -1091,7 +1099,7 @@ test("foundation meeting PDF reflects saved follow-ups and contains no pupil det
     viewport: { width: 1440, height: 1000 },
   });
   await context.request.post(base + "/api/session", {
-    data: { role: "foundation" },
+    data: { role: "foundation", plan: "Yayasan" },
   });
   const page = await context.newPage();
   await page.goto(base + "/#/dashboard");
@@ -1139,4 +1147,195 @@ test("foundation meeting PDF reflects saved follow-ups and contains no pupil det
     false,
   );
   await context.close();
+});
+
+test("annual pricing uses the actual student count, rounded totals, and each foundation unit", async () => {
+  const context = await newContext({ viewport: { width: 1440, height: 1000 } });
+  try {
+    const session = await context.request.post(base + "/api/session", {
+      data: { role: "principal", plan: "Pro" },
+    });
+    assert.equal(session.status(), 200);
+    const page = await context.newPage();
+    await page.goto(base + "/#/packages");
+    await page.getByRole("heading", { name: "Kalkulator sekolah" }).waitFor();
+    const cards = page.locator(".package-grid > .panel");
+    const schoolCount = page.getByLabel("Jumlah siswa aktif di sekolah", { exact: true });
+    await schoolCount.fill("350");
+    assert.match(await cards.nth(0).locator(".package-price").innerText(), /Rp\s*4\.500\.000/);
+    assert.match(await cards.nth(1).locator(".package-price").innerText(), /Rp\s*7\.000\.000/);
+    assert.match(await cards.nth(0).locator(".package-price small").innerText(), /350 siswa/);
+    assert.match(await cards.nth(1).locator(".pricing-averages").innerText(), /Rp\s*20\.000 per siswa\/tahun/);
+    assert.match(await page.locator(".pricing-comparison h3").innerText(), /Rp\s*2\.500\.000 per tahun/);
+    assert.match(await page.locator(".pricing-comparison").innerText(), /Rp\s*595 per siswa per bulan/);
+    await page.screenshot({ path: "test-results/pricing-annual-desktop.png", animations: "disabled" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "test-results/pricing-annual-mobile.png", fullPage: true, animations: "disabled" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
+    // A non-anchor count checks rounding of the annual bill before averaging.
+    await schoolCount.fill("201");
+    assert.match(await cards.nth(0).locator(".package-price").innerText(), /Rp\s*3\.507\.000/);
+    assert.match(await cards.nth(1).locator(".package-price").innerText(), /Rp\s*5\.510\.000/);
+    assert.match(await cards.nth(0).locator(".pricing-averages").innerText(), /Rp\s*17\.448 per siswa\/tahun/);
+    await schoolCount.fill("99");
+    assert.match(await cards.nth(0).locator(".package-price").innerText(), /Rp\s*3\.500\.000/);
+    assert.match(await cards.nth(0).locator(".package-price small").innerText(), /99 siswa/);
+
+    const unitTable = page.locator(".pricing-table").first();
+    assert.equal(await unitTable.locator("tbody tr").count(), 3);
+    assert.match(await page.locator(".pricing-total strong").innerText(), /Rp\s*30\.000\.000 \/ tahun/);
+    assert.match(await unitTable.locator("tfoot").innerText(), /25\.500\.000[\s\S]*4\.500\.000[\s\S]*30\.000\.000/);
+    await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).fill("350");
+    assert.match(await unitTable.locator("tbody tr").first().innerText(), /350[\s\S]*7\.000\.000[\s\S]*1\.500\.000[\s\S]*8\.500\.000/);
+    assert.match(await page.locator(".pricing-total strong").innerText(), /Rp\s*28\.500\.000 \/ tahun/);
+    await page.getByRole("button", { name: "Tambah unit", exact: true }).click();
+    assert.equal(await unitTable.locator("tbody tr").count(), 4);
+    await page.getByRole("button", { name: "Hapus Unit 4", exact: true }).click();
+    assert.equal(await unitTable.locator("tbody tr").count(), 3);
+
+    await schoolCount.fill("2001");
+    assert.match(await cards.nth(0).locator(".package-price").innerText(), /Penawaran khusus/);
+    assert.match(await cards.nth(1).locator(".package-price").innerText(), /Penawaran khusus/);
+    assert.equal(await cards.nth(0).locator(".pricing-averages").count(), 0);
+    await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).fill("2001");
+    assert.match(await page.locator(".pricing-total strong").innerText(), /Total memerlukan penawaran khusus/);
+    assert.match(await cards.nth(2).locator(".package-price").innerText(), /Penawaran khusus/);
+    assert.match(await unitTable.locator("tbody tr").first().innerText(), /Penawaran khusus/);
+    assert.equal(await page.locator(".pricing-total .pricing-averages").count(), 0);
+    await schoolCount.fill("0");
+    await page.getByRole("alert").filter({ hasText: "minimal 1" }).waitFor();
+    assert.equal(await schoolCount.getAttribute("aria-invalid"), "true");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Standard hides academic risk and a Pro trial preserves edited data and the selected role", async () => {
+  const context = await newContext({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await context.request.post(base + "/api/session", {
+      data: { role: "admin", plan: "Standard" },
+    });
+    const initial = await (await context.request.get(base + "/api/bootstrap")).json();
+    const pupil = initial.data.students[2];
+    const address = "Alamat tetap tersimpan saat mencoba Pro";
+    const edit = await context.request.post(base + "/api/students", {
+      data: { ...pupil, address },
+    });
+    assert.equal(edit.status(), 200);
+    const page = await context.newPage();
+    await page.goto(base + "/#/dashboard");
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    const example = page.getByRole("complementary", { name: "Contoh fitur Pro" });
+    await example.waitFor();
+    assert.equal(await example.locator("ol li").count(), 4);
+    assert.match(await example.innerText(), /Simulasi siswa fiktif/);
+    assert.equal((await example.innerText()).includes(pupil.name), false);
+    await page.getByRole("button", { name: "Ganti peran" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: /Kepala Sekolah Pantau akademik/ }).click();
+    await page.getByRole("heading", { name: /Pak Ahmad/ }).waitFor();
+    assert.equal((await (await context.request.get(base + "/api/bootstrap")).json()).user.role, "principal");
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    assert.equal(await example.count(), 1);
+    await page.screenshot({ path: "test-results/standard-dashboard.png", animations: "disabled" });
+    for (const route of ["ews", "below-kkm", "interventions", "analytics", "workflow"])
+      assert.equal(await page.locator(`.nav-item[href="#/${route}"]`).count(), 0, route);
+    assert.equal(await page.locator(".ews-overview, .student-ews").count(), 0);
+    await page.goto(base + "/#/students");
+    await page.getByRole("heading", { name: "Student 360", exact: true }).waitFor();
+    assert.equal(await page.getByLabel("Filter tingkat risiko").count(), 0);
+    assert.equal(await page.getByRole("columnheader", { name: "Status risiko" }).count(), 0);
+    assert.equal(await page.locator(".badge").filter({ hasText: /^Risiko / }).count(), 0);
+    await page.goto(base + "/#/students/" + pupil.id);
+    await page.locator(".student-hero h1").waitFor();
+    assert.equal(await page.locator(".student-ews, .detail-chart").count(), 0);
+    assert.equal(await page.getByRole("heading", { name: "Perjalanan akademik", exact: true }).count(), 0);
+    assert.match(await page.locator(".metric").filter({ hasText: "Tugas tertunda" }).locator("strong").innerText(), /^\d+$/);
+    for (const route of ["ews", "interventions", "analytics"]) {
+      await page.goto(base + "/#/" + route);
+      await page.getByRole("heading", { name: /Halaman tidak tersedia/ }).waitFor();
+    }
+    await page.goto(base + "/#/dashboard");
+    await page.getByRole("button", { name: "Coba Pro tanpa menghapus data", exact: true }).click();
+    await page.getByText("Sedang mencoba Pro", { exact: true }).first().waitFor();
+    const upgraded = await (await context.request.get(base + "/api/bootstrap")).json();
+    assert.equal(upgraded.user.role, "principal");
+    assert.equal(upgraded.data.settings[0].plan, "Pro");
+    assert.equal(upgraded.data.students.find((student) => student.id === pupil.id).address, address);
+    assert.equal(await example.count(), 0);
+    await page.goto(base + "/#/dashboard");
+    await page.locator(".ews-overview").waitFor();
+    assert.equal(await page.locator('.nav-item[href="#/ews"]').count(), 1);
+    await page.goto(base + "/#/students/" + pupil.id);
+    await page.locator(".student-ews").waitFor();
+    await page.reload();
+    await page.getByText("Sedang mencoba Pro", { exact: true }).first().waitFor();
+    assert.equal((await (await context.request.get(base + "/api/bootstrap")).json()).user.role, "principal");
+    await page.getByLabel("Ganti paket demo").selectOption("Standard");
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    assert.equal(await page.locator(".student-ews").count(), 0);
+    const downgraded = await (await context.request.get(base + "/api/bootstrap")).json();
+    assert.equal(downgraded.user.role, "principal");
+    assert.equal(downgraded.data.students.find((student) => student.id === pupil.id).address, address);
+  } finally {
+    await context.request.post(base + "/api/demo-plan", { data: { plan: "Pro" } });
+    await context.close();
+  }
+});
+
+test("Yayasan trial keeps Admin and Security out of academics and family risk stays child-scoped", async () => {
+  const context = await newContext({ viewport: { width: 1440, height: 1000 } });
+  try {
+    const page = await context.newPage();
+    for (const role of ["admin", "security"]) {
+      await context.request.post(base + "/api/session", {
+        data: { role, plan: "Yayasan" },
+      });
+      await page.goto("about:blank");
+      await page.goto(base + "/#/dashboard");
+      await page.getByText("Sedang mencoba Yayasan", { exact: true }).first().waitFor();
+      assert.equal(await page.locator(".ews-overview, .student-ews").count(), 0, role);
+      const bootstrap = await (await context.request.get(base + "/api/bootstrap")).json();
+      assert.equal(bootstrap.user.role, role);
+      assert.equal(bootstrap.data.grades.length, 0, role);
+      for (const route of ["ews", "interventions", "below-kkm", "grades"]) {
+        assert.equal(await page.locator(`.nav-item[href="#/${route}"]`).count(), 0, `${role}:${route}`);
+        await page.goto(base + "/#/" + route);
+        await page.getByRole("heading", { name: /Halaman tidak tersedia/ }).waitFor();
+      }
+      if (role === "security")
+        assert.equal(await page.getByLabel("Ganti paket demo").count(), 0);
+    }
+    for (const role of ["parent", "student"]) {
+      await context.request.post(base + "/api/session", {
+        data: { role, plan: "Pro" },
+      });
+      const family = await (await context.request.get(base + "/api/bootstrap")).json();
+      assert.equal(family.data.students.length, 1, role);
+      assert.equal(family.data.students[0].id, "s1-st-0");
+      assert.ok(family.data.grades.every((grade) => grade.studentId === "s1-st-0"));
+      await page.goto("about:blank");
+      await page.goto(base + "/#/dashboard");
+      await page.locator(".student-ews").waitFor();
+      assert.equal(await page.locator(".student-ews").count(), 1, role);
+      assert.match(await page.locator(".personal-profile").innerText(), new RegExp(family.data.students[0].name));
+      assert.equal(await page.getByLabel("Ganti paket demo").count(), 0);
+      assert.equal(await page.locator('.nav-item[href="#/ews"]').count(), 0);
+      await page.goto(base + "/#/students/s1-st-1");
+      await page.getByRole("heading", { name: /Halaman tidak tersedia/ }).waitFor();
+    }
+    for (const role of ["teacher", "parent", "student", "security", "foundation"]) {
+      await context.request.post(base + "/api/session", { data: { role, plan: "Standard" } });
+      await page.goto("about:blank");
+      await page.goto(base + "/#/dashboard");
+      await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+      assert.equal(await page.locator(".student-ews, .ews-overview, .pro-example").count(), 0, role);
+    }
+  } finally {
+    await context.request.post(base + "/api/session", { data: { role: "principal", plan: "Pro" } });
+    await context.close();
+  }
 });

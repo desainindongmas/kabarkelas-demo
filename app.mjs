@@ -15,6 +15,7 @@ import {
   canReviewReport,
   canReadCollection,
   isPro,
+  isFoundation,
   administrativeBackupKinds,
 } from "./shared/access.mjs";
 
@@ -185,6 +186,16 @@ export function createApplication({ databasePath, secureCookies = false }) {
       action,
       date: new Date().toISOString(),
     });
+  const setDemoPlan = (plan) => {
+    if (!["Standard", "Pro", "Yayasan"].includes(plan))
+      invalid("Paket tidak valid.");
+    transactional(() => {
+      for (const school of schools) {
+        const settings = all(school.id, "settings")[0];
+        put("settings", school.id, { ...settings, plan });
+      }
+    });
+  };
   const teaching = (user) => user.role === "teacher";
   const personal = (user) => ["parent", "student"].includes(user.role);
   const accessibleStudent = (user, student) =>
@@ -246,8 +257,26 @@ export function createApplication({ databasePath, secureCookies = false }) {
     };
   }
   function scoped(user, kind, items) {
-    if (!canReadCollection(user, kind)) return [];
     const config = all(user.school, "settings")[0] || {};
+    if (!canReadCollection(user, kind, config)) return [];
+    if (!isPro(config) && kind === "settings")
+      items = items.map((item) =>
+        Object.fromEntries(
+          Object.entries(item).filter(
+            ([key]) =>
+              ![
+                "ewsAttendance",
+                "ewsDrop",
+                "ewsOverdue",
+                "approvalMode",
+                "reportDue",
+                "followupDays",
+              ].includes(key),
+          ),
+        ),
+      );
+    if (!isPro(config) && kind === "grades")
+      items = items.map(({ previous, ...grade }) => grade);
     const module = {
       character: "character",
       tahfizh: "tahfizh",
@@ -257,12 +286,6 @@ export function createApplication({ databasePath, secureCookies = false }) {
       module &&
       config.enabledModules &&
       !config.enabledModules.includes(module)
-    )
-      return [];
-    if (
-      ["termSnapshots", "savedReports"].includes(kind) &&
-      !isPro(config) &&
-      user.role !== "foundation"
     )
       return [];
     if (["foundationTasks", "unitNeeds", "schoolTargets"].includes(kind))
@@ -318,7 +341,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
       const fields = {
         students: ["id", "name", "nis", "classId", "photo", "status"],
         classes: ["id", "name", "room"],
-        settings: ["id", "name", "year", "semester"],
+        settings: ["id", "name", "year", "semester", "plan"],
         pickupPersons: [
           "id",
           "studentId",
@@ -365,32 +388,35 @@ export function createApplication({ databasePath, secureCookies = false }) {
         "gradeScale",
         "enabledModules",
         "kkm",
+        "plan",
       ];
+      const ewsKeys =
+        canReadAcademic(user) && isPro(config)
+          ? ["ewsAttendance", "ewsDrop", "ewsOverdue"]
+          : [];
       const keys =
-        user.role === "admin"
-          ? [
-              ...base,
-              "address",
-              "weightDaily",
-              "weightMidterm",
-              "weightFinal",
-              "plan",
-            ]
-          : user.role === "teacher"
+        user.role === "foundation"
+          ? ["id", "name", "year", "semester", "principal", "plan"]
+          : user.role === "admin"
             ? [
                 ...base,
+                "address",
                 "weightDaily",
                 "weightMidterm",
                 "weightFinal",
-                "ewsAttendance",
-                "ewsDrop",
-                "ewsOverdue",
-                "plan",
-                "approvalMode",
-                "reportDue",
-                "followupDays",
               ]
-            : base;
+            : user.role === "teacher"
+              ? [
+                  ...base,
+                  "weightDaily",
+                  "weightMidterm",
+                  "weightFinal",
+                  ...ewsKeys,
+                  "approvalMode",
+                  "reportDue",
+                  "followupDays",
+                ]
+              : [...base, ...ewsKeys];
       return items.map((i) =>
         Object.fromEntries(
           keys.filter((k) => Object.hasOwn(i, k)).map((k) => [k, i[k]]),
@@ -431,8 +457,24 @@ export function createApplication({ databasePath, secureCookies = false }) {
       ),
       ids = new Set(students.map((s) => s.id));
     if (kind === "students")
-      return students.map((s) =>
-        user.role === "admin"
+      return students.map((student) => {
+        const s = isPro(config)
+          ? student
+          : Object.fromEntries(
+              Object.entries(student).filter(
+                ([key]) =>
+                  ![
+                    "history",
+                    "overdue",
+                    "risk",
+                    "riskLevel",
+                    "riskReasons",
+                    "trend",
+                    "drop",
+                  ].includes(key),
+              ),
+            );
+        return user.role === "admin"
           ? Object.fromEntries(
               Object.entries(s).filter(
                 ([key]) => !["attendance", "history", "overdue"].includes(key),
@@ -447,8 +489,8 @@ export function createApplication({ databasePath, secureCookies = false }) {
                     ),
                 ),
               )
-            : s,
-      );
+            : s;
+      });
     if (
       [
         "grades",
@@ -590,12 +632,18 @@ export function createApplication({ databasePath, secureCookies = false }) {
     next();
   });
   app.post("/api/session", (req, res) => {
-    const { role = "principal", school = "s1", isHomeroom = false } = req.body;
+    const {
+      role = "principal",
+      school = "s1",
+      isHomeroom = false,
+      plan,
+    } = req.body;
     if (
       !Object.hasOwn(roleNames, role) ||
       !schools.some((s) => s.id === school)
     )
       return res.status(400).json({ error: "Peran atau sekolah tidak valid." });
+    if (plan !== undefined) setDemoPlan(plan);
     const user = normalizeUser({
       role,
       school,
@@ -660,7 +708,11 @@ export function createApplication({ databasePath, secureCookies = false }) {
         all(user.school, "settings")[0]?.name ||
         schools.find((s) => s.id === user.school).name,
     };
-    const overview = user.role === "foundation" ? product.board().units : [];
+    const config = all(user.school, "settings")[0];
+    const overview =
+      user.role === "foundation" && isFoundation(config)
+        ? product.board().units
+        : [];
     res.json({
       user,
       schools,
@@ -673,8 +725,10 @@ export function createApplication({ databasePath, secureCookies = false }) {
         paymentGateway: false,
         ai: false,
         reportGeneration: "browser",
-        plan: all(user.school, "settings")[0]?.plan || "Pro",
-        pro: isPro(all(user.school, "settings")[0]),
+        plan: config?.plan || "Pro",
+        pro: isPro(config),
+        ews: isPro(config),
+        foundation: isFoundation(config),
         generatedAt: new Date().toISOString(),
       },
     });
@@ -745,7 +799,11 @@ export function createApplication({ databasePath, secureCookies = false }) {
       role !== "teacher"
     )
       deny();
-    if (kind === "interventions" && !canIntervene(user)) deny();
+    if (kind === "interventions") {
+      if (!canIntervene(user)) deny();
+      if (!isPro(config))
+        deny("EWS dan pendampingan risiko tersedia pada paket Pro dan Yayasan.");
+    }
     if (
       ["character", "tahfizh"].includes(kind) &&
       !(role === "teacher" && user.isHomeroom)
@@ -1357,6 +1415,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
     audit,
     today,
     validDate,
+    setDemoPlan,
   });
   app.post("/api/academic-batch", (req, res) => {
     const { kind, rows } = req.body;
@@ -1426,6 +1485,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
   app.get("/api/academic-backup", (req, res) => {
     if (req.user.role !== "principal") deny();
     audit(req.user, "Mengekspor cadangan akademik sekolah");
+    const config = all(req.user.school, "settings")[0];
     const kindsToExport = [
       "students",
       "classes",
@@ -1440,7 +1500,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
       "character",
       "tahfizh",
       "materials",
-    ];
+    ].filter((kind) => canReadCollection(req.user, kind, config));
     res.json({
       format: "KabarKelas-Akademik-1",
       school: req.user.school,

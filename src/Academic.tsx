@@ -361,7 +361,7 @@ export function Grades() {
       });
       await reload();
       setChanges({});
-      toast("Nilai berhasil diperbarui. EWS telah dievaluasi ulang.");
+      toast(isPro(data.settings[0]) ? "Nilai berhasil diperbarui. EWS telah dievaluasi ulang." : "Nilai berhasil diperbarui.");
     } catch (e) {
       toast((e as Error).message, true);
     } finally {
@@ -476,7 +476,7 @@ export function Grades() {
                 </select>
               </>
             )}
-            {editable && (
+            {editable && isPro(data.settings[0]) && (
               <Button
                 variant="ghost"
                 onClick={() => {

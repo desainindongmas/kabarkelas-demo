@@ -30,7 +30,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { avg, currency, date, risk, useApp, greeting, liveDate } from "./model";
+import { avg, currency, date, risk, isPro, useApp, greeting, liveDate } from "./model";
 import {
   Avatar,
   Badge,
@@ -45,14 +45,20 @@ import {
 import { reportPDF } from "./export";
 export function PersonalDashboard() {
   const { data, user, go, school } = useApp();
+  const pro = isPro(data.settings[0]);
   const [period, setPeriod] = useState("semester");
   const s = data.students[0];
   if (!s) return <Empty title="Belum ada siswa yang terhubung" />;
   const r = risk(s, data),
     parent = user.role === "parent",
     grades = data.grades.filter((g) => g.studentId === s.id),
-    pending = data.invoices.filter((i) => i.status !== "Lunas"),
+    pending = data.invoices.filter((i) => i.studentId === s.id && i.status !== "Lunas"),
     report = data.reports.find((r) => r.studentId === s.id);
+  const pendingTasks = data.assignments.filter(
+    (a) => a.classId === s.classId && !data.submissions.some(
+      (submission) => submission.studentId === s.id && submission.assignmentId === a.id,
+    ),
+  );
   return (
     <>
       <PageHead
@@ -63,12 +69,12 @@ export function PersonalDashboard() {
         }
         title={
           parent
-            ? `${greeting()}, Ibu Dian`
+            ? `${greeting()}, ${s.parent || "Ayah/Bunda"}`
             : `Halo, ${s.name.split(" ")[0]}! ☀`
         }
         description={
           parent
-            ? "Mari lihat cerita belajar Nadia dan dukung langkah kecilnya hari ini."
+            ? `Mari lihat cerita belajar ${s.name.split(" ")[0]} dan dukung langkah kecilnya hari ini.`
             : "Semangat baru, kesempatan baru. Yuk, mulai langkah belajarmu hari ini."
         }
         action={
@@ -97,7 +103,7 @@ export function PersonalDashboard() {
           Unduh rapor
         </Button>
       </div>
-      <div
+      {pro && <div
         className={`student-ews ${r.level === "Rendah" ? "healthy" : r.level === "Tinggi" ? "risk-high" : "risk-medium"}`}
       >
         <div className="ews-title">
@@ -110,7 +116,7 @@ export function PersonalDashboard() {
               {r.level === "Rendah"
                 ? "Perkembangan yang baik, terus pertahankan!"
                 : parent
-                  ? "Nadia membutuhkan dukungan kita bersama"
+                  ? `${s.name.split(" ")[0]} membutuhkan dukungan kita bersama`
                   : "Ada beberapa hal yang bisa kita perbaiki bersama"}
             </h3>
             <p>
@@ -123,13 +129,13 @@ export function PersonalDashboard() {
             Lihat tugas yang perlu diselesaikan
           </Button>
         </div>
-      </div>
+      </div>}
       <TodayWork />
       <SchoolReminders />
       <div className="metrics four">
         <Metric
           label="Rata-rata nilai"
-          value={r.score}
+          value={avg(grades.map((g) => g.score))}
           icon={TrendingUp}
           note={`${grades.length} mata pelajaran`}
           onClick={() => go("grades")}
@@ -144,7 +150,7 @@ export function PersonalDashboard() {
         />
         <Metric
           label="Tugas tertunda"
-          value={s.overdue}
+          value={pendingTasks.length}
           icon={BookOpen}
           tone="amber"
           note="yuk, selesaikan bertahap"
@@ -160,7 +166,7 @@ export function PersonalDashboard() {
         />
       </div>
       <div className="student-grid">
-        <Panel
+        {pro ? <Panel
           title={parent ? "Ringkasan perkembangan" : "Ringkasan belajarmu"}
           subtitle="Ringkasan berbasis data demo · ditinjau bersama wali kelas"
           action={<Sparkles size={19} className="text-teal" />}
@@ -206,7 +212,7 @@ export function PersonalDashboard() {
                 <h3>Kita mendampingi bersama</h3>
                 <p>
                   {
-                    data.interventions.filter((i) => i.status !== "Selesai")
+                    data.interventions.filter((i) => i.studentId === s.id && i.status !== "Selesai")
                       .length
                   }{" "}
                   rencana pendampingan sedang dijalankan. Hubungi wali kelas
@@ -215,8 +221,13 @@ export function PersonalDashboard() {
               </div>
             </div>
           </div>
-        </Panel>
-        <Panel
+        </Panel> : <Panel title={parent ? "Kabar belajar anak" : "Ringkasan belajarmu"} subtitle="Data pembelajaran yang telah dicatat sekolah.">
+          <div className="parent-insights">
+            <div><span className="heading-icon blue"><ClipboardCheck size={19} /></span><div><h3>Kehadiran tercatat {s.attendance}%</h3><p>Lihat catatan hadir, izin, dan sakit pada riwayat kehadiran.</p><Button variant="secondary" onClick={() => go("attendance")}>Lihat kehadiran</Button></div></div>
+            <div><span className="heading-icon teal"><BookOpen size={19} /></span><div><h3>{pendingTasks.length} tugas belum selesai</h3><p>Buka tugas untuk melihat instruksi dan tenggat. Selesaikan sedikit demi sedikit sesuai jadwal belajar.</p><Button variant="secondary" onClick={() => go("assignments")}>Lihat tugas</Button></div></div>
+          </div>
+        </Panel>}
+        {pro ? <Panel
           title="Perjalanan nilai"
           subtitle="Proses belajar selalu punya ceritanya sendiri"
           action={
@@ -275,7 +286,10 @@ export function PersonalDashboard() {
               Detail nilai <ArrowUpRight size={14} />
             </button>
           </div>
-        </Panel>
+        </Panel> : <Panel title="Nilai mata pelajaran" subtitle="Nilai saat ini dan deskripsi dari guru.">
+          <div className="table-scroll"><table><thead><tr><th>Mata pelajaran</th><th>Nilai</th></tr></thead><tbody>{grades.slice(0, 6).map((g) => <tr key={g.id}><td>{g.subject}</td><td><strong>{g.score}</strong><span className="muted"> /100</span></td></tr>)}</tbody></table></div>
+          <Button variant="secondary" onClick={() => go("grades")}>Semua nilai <ArrowRight size={15} /></Button>
+        </Panel>}
       </div>
       <div className="student-grid">
         <Panel
@@ -287,10 +301,7 @@ export function PersonalDashboard() {
             </button>
           }
         >
-          {data.assignments
-            .filter(
-              (a) => !data.submissions.some((s) => s.assignmentId === a.id),
-            )
+          {pendingTasks
             .slice(0, 3)
             .map((a) => (
               <button

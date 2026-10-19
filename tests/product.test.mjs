@@ -24,11 +24,11 @@ after(async () => {
   runtime.db.close();
   await rm(dir, { recursive: true, force: true });
 });
-async function login(role, school = "s1", isHomeroom = false) {
+async function login(role, school = "s1", isHomeroom = false, plan) {
   const r = await fetch(base + "/api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ role, school, isHomeroom }),
+    body: JSON.stringify({ role, school, isHomeroom, plan }),
   });
   assert.equal(r.status, 200);
   return r.headers.get("set-cookie").split(";")[0];
@@ -51,7 +51,7 @@ test("all seven roles receive only authorized collections and explicit minimum f
       if (!collectionsByRole[role].includes(kind))
         assert.equal(rows.length, 0, role + ":" + kind);
     for (const page of pagesByRole[role])
-      assert.equal(canAccessPage(b.user, page), true, role + ":" + page);
+      assert.equal(canAccessPage(b.user, page, { plan: "Yayasan" }), true, role + ":" + page);
     if (role === "security") {
       assert.equal(b.data.pickupPersons.length, 0);
       assert.deepEqual(
@@ -225,7 +225,7 @@ test("unregistered pickup requires Admin confirmation and a permit is valid only
   );
 });
 test("foundation gives unit instructions; only the assigned principal records progress and evidence", async () => {
-  const foundation = await login("foundation"),
+  const foundation = await login("foundation", "s1", false, "Yayasan"),
     p1 = await login("principal"),
     p2 = await login("principal", "s2");
   const task = await call(foundation, "/api/foundation-tasks", {
@@ -280,7 +280,7 @@ test("foundation gives unit instructions; only the assigned principal records pr
 });
 test("unit needs are proposed by principal, decided by foundation, fulfilled by unit and isolated by school", async () => {
   const p = await login("principal"),
-    f = await login("foundation"),
+    f = await login("foundation", "s1", false, "Yayasan"),
     other = await login("principal", "s2");
   const need = await call(p, "/api/unit-needs", {
     title: "Buku pendampingan",
@@ -357,6 +357,9 @@ test("Standard preserves core work and backup while Pro gates configurable workf
   assert.ok(b.data.grades.length);
   assert.ok(b.data.reports.length);
   assert.equal(b.data.termSnapshots.length, 0);
+  assert.equal(b.data.interventions.length, 0);
+  assert.equal(b.data.settings[0].ewsAttendance, undefined);
+  assert.equal(b.data.students[0].history, undefined);
   assert.equal((await call(admin, "/api/backup")).status, 200);
   assert.equal((await call(p, "/api/demo-plan", { plan: "Pro" })).status, 200);
   assert.equal(
@@ -510,6 +513,8 @@ test("academic archives remain available on Standard to the principal, never Adm
   const archive = await call(p, "/api/academic-backup");
   assert.equal(archive.status, 200);
   assert.ok(archive.body.data.grades.length);
+  assert.equal(archive.body.data.interventions, undefined);
+  assert.equal(archive.body.data.students[0].history, undefined);
   for (const role of ["admin", "security", "teacher", "parent", "foundation"])
     assert.equal(
       (await call(await login(role), "/api/academic-backup")).status,

@@ -281,6 +281,46 @@ export function Board({
   const schoolOpts = schools.map((s) => ({ value: s.id, label: s.name }));
   const schoolName = (id: string) =>
     overview.find((s) => s.id === id)?.name || id;
+  const riskSummary = (s: Row) => s.riskCounts
+    ? `${s.riskCounts.high ?? 0} tinggi · ${s.riskCounts.medium ?? 0} sedang · ${s.riskCounts.low ?? 0} rendah`
+    : "Ringkasan risiko belum tersedia.";
+  const handlingSummary = (s: Row) => s.handlingSummary
+    ? `${s.handlingSummary.total ?? 0} pendampingan · ${s.handlingSummary.open ?? 0} aktif · ${s.handlingSummary.overdue ?? 0} lewat tenggat · ${s.handlingSummary.evaluated ?? 0} dievaluasi`
+    : "Ringkasan pendampingan belum tersedia.";
+  const outcomeSummary = (s: Row) => s.handlingSummary
+    ? `${s.handlingSummary.improved ?? 0} membaik · ${s.handlingSummary.needsFollowup ?? 0} perlu tindak lanjut · ${s.handlingSummary.unchanged ?? 0} belum berubah`
+    : "Hasil evaluasi belum tersedia.";
+  const priorityReason = (s: Row) => (s.issues || [])
+    .map((issue: Row) => `${issue.metric} ${issue.value}% dari target ${issue.target}%`)
+    .join(" · ") || "Indikator operasional mencapai target unit.";
+  const nextTask = (s: Row) => tasks
+    .filter((task) => task.schoolId === s.id && task.status !== "Selesai")
+    .sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")))[0];
+  const urgent = (s: Row) => s.overdueTasks || s.riskCounts?.high || s.handlingSummary?.overdue;
+  const needsAttention = (s: Row) => urgent(s) || s.issues?.length || s.handlingSummary?.needsFollowup;
+  const aggregateSummary = (s: Row) => (
+    <div className="unit-risk-summary">
+      <strong>Risiko siswa · agregat</strong>
+      <p>{riskSummary(s)}</p>
+      <strong>Efektivitas pendampingan</strong>
+      <p>{handlingSummary(s)}</p>
+      <p>{outcomeSummary(s)}</p>
+    </div>
+  );
+  const followupSummary = (s: Row) => {
+    const task = nextTask(s);
+    return task ? (
+      <div className="unit-followup-summary">
+        <strong>Arahan berikutnya: {task.title}</strong>
+        <div className="task-owner">
+          <span>PIC {task.pic || "Belum ditetapkan"}</span>
+          <span>Tenggat {task.due ? date(task.due, true) : "Belum ditetapkan"}</span>
+        </div>
+        <p><strong>Progres:</strong> {task.response || "Belum ada laporan dari unit."}</p>
+        {task.evidence && <p><strong>Bukti:</strong> {task.evidence}</p>}
+      </div>
+    ) : <p className="unit-followup-summary">Belum ada arahan terbuka untuk unit ini.</p>;
+  };
   const save = async (path: string, v: Partial<Row>) => {
     await api(path, v);
     await reload();
@@ -301,6 +341,9 @@ export function Board({
           `Periode ${s.period}. ${s.students} siswa, ${s.teachers} guru.`,
           `Kehadiran ${s.attendance}% / target ${s.target.attendance}%. Rapor terbit ${s.reportRate}% / target ${s.target.reportRate}%.`,
           `Penerimaan SPP jatuh tempo ${s.collectionRate}% / target ${s.target.collectionRate}%. Kelengkapan data ${s.dataCompleteness}%.`,
+          `Risiko siswa (agregat): ${riskSummary(s)}.`,
+          `Pendampingan: ${handlingSummary(s)}. Hasil: ${outcomeSummary(s)}.`,
+          `Dasar prioritas: ${priorityReason(s)}`,
           `Pembaruan terakhir ${date(s.lastUpdated)}.`,
           ...tasks
             .filter((t) => t.schoolId === s.id)
@@ -395,6 +438,21 @@ export function Board({
                     RaporTerbit: s.reportRate,
                     PenerimaanSPPJatuhTempo: s.collectionRate,
                     KelengkapanData: s.dataCompleteness,
+                    RisikoTinggi: s.riskCounts?.high ?? "",
+                    RisikoSedang: s.riskCounts?.medium ?? "",
+                    RisikoRendah: s.riskCounts?.low ?? "",
+                    TotalPendampingan: s.handlingSummary?.total ?? "",
+                    PendampinganAktif: s.handlingSummary?.open ?? "",
+                    PendampinganLewatTenggat: s.handlingSummary?.overdue ?? "",
+                    PendampinganDievaluasi: s.handlingSummary?.evaluated ?? "",
+                    HasilMembaik: s.handlingSummary?.improved ?? "",
+                    PerluTindakLanjut: s.handlingSummary?.needsFollowup ?? "",
+                    HasilBelumBerubah: s.handlingSummary?.unchanged ?? "",
+                    DasarPrioritas: priorityReason(s),
+                    ArahanBerikutnya: nextTask(s)?.title || "",
+                    PIC: nextTask(s)?.pic || "",
+                    Tenggat: nextTask(s)?.due || "",
+                    Progres: nextTask(s)?.response || "",
                     PembaruanTerakhir: s.lastUpdated,
                   })),
                   "Perbandingan-unit",
@@ -415,6 +473,8 @@ export function Board({
                   <th>Rapor terbit</th>
                   <th>SPP jatuh tempo</th>
                   <th>Data lengkap</th>
+                  <th>Risiko siswa · agregat</th>
+                  <th>Efektivitas pendampingan</th>
                   <th>Pembaruan</th>
                 </tr>
               </thead>
@@ -433,6 +493,11 @@ export function Board({
                     <td>{s.reportRate}%</td>
                     <td>{s.collectionRate}%</td>
                     <td>{s.dataCompleteness}%</td>
+                    <td>{riskSummary(s)}</td>
+                    <td>
+                      {handlingSummary(s)}
+                      <small className="block">{outcomeSummary(s)}</small>
+                    </td>
                     <td>
                       {date(s.lastUpdated, true)}
                       {s.staleDays > 3 && (
@@ -452,7 +517,7 @@ export function Board({
             <div>
               <span className="eyebrow">YANG PERLU DIPUTUSKAN MINGGU INI</span>
               <h2>
-                {units.filter((s) => s.issues.length || s.overdueTasks).length}{" "}
+                {units.filter(needsAttention).length}{" "}
                 unit membutuhkan perhatian
               </h2>
               <p>
@@ -514,16 +579,16 @@ export function Board({
                   </div>
                   <Badge
                     tone={
-                      s.overdueTasks
+                      urgent(s)
                         ? "red"
-                        : s.issues.length
+                        : needsAttention(s)
                           ? "amber"
                           : "green"
                     }
                   >
-                    {s.overdueTasks
-                      ? "Lewat tenggat"
-                      : s.issues.length
+                    {urgent(s)
+                      ? "Prioritas penanganan"
+                      : needsAttention(s)
                         ? "Perlu perhatian"
                         : "Terkendali"}
                   </Badge>
@@ -562,6 +627,9 @@ export function Board({
                   {s.attendance - s.previousAttendance} poin dari semester
                   sebelumnya. Kelengkapan data {s.dataCompleteness}%.
                 </p>
+                <p className="unit-priority-reason"><strong>Dasar prioritas:</strong> {priorityReason(s)}</p>
+                {aggregateSummary(s)}
+                {followupSummary(s)}
                 <small className="data-freshness">
                   Pembaruan sumber {date(s.lastUpdated, true)} · Data dummy
                 </small>
@@ -720,12 +788,7 @@ export function Board({
               <article key={s.id}>
                 <h3>{s.name}</h3>
                 <p>
-                  {s.issues
-                    .map(
-                      (i: Row) =>
-                        `${i.metric} ${i.value}% dari target ${i.target}%`,
-                    )
-                    .join(" · ") || "Indikator mencapai target unit."}
+                  {priorityReason(s)}
                 </p>
                 <p>
                   {
@@ -741,6 +804,8 @@ export function Board({
                   }{" "}
                   kebutuhan menunggu keputusan
                 </p>
+                {aggregateSummary(s)}
+                {followupSummary(s)}
                 <small>
                   Pembaruan sumber {date(s.lastUpdated)}. Identitas siswa tidak
                   disertakan.
@@ -1017,138 +1082,7 @@ export function UnitWork() {
   );
 }
 
-export function Packages() {
-  const { user, data, reload, toast } = useApp();
-  const active = data.settings[0]?.plan || "Pro",
-    [busy, setBusy] = useState(false);
-  const prices = [149000, 199000, 499000];
-  const plans = [
-    {
-      name: "Standard",
-      promise: "Kegiatan satu sekolah tertata",
-      unit: "per sekolah / bulan",
-      features: [
-        "Data sekolah, impor dan backup dasar",
-        "Absensi, nilai, tugas dan kuis",
-        "Rapor PDF & ZIP massal",
-        "EWS dasar dan tindak lanjut",
-        "SPP manual, cicilan, kuitansi",
-        "Portal keluarga & verifikasi gerbang",
-      ],
-    },
-    {
-      name: "Pro",
-      promise: "Pengawasan dan pekerjaan berulang lebih mudah",
-      unit: "per sekolah / bulan",
-      features: [
-        "Seluruh fitur Standard",
-        "Analisis lintas semester",
-        "Aturan EWS yang dapat disesuaikan",
-        "Alur persetujuan rapor bertahap",
-        "Pengingat tenggat dalam aplikasi",
-        "Tampilan laporan tersimpan",
-      ],
-    },
-    {
-      name: "Yayasan",
-      promise: "Keputusan lintas unit dengan tindak lanjut jelas",
-      unit: "untuk 3 unit / bulan",
-      features: [
-        "Fitur Pro untuk unit terdaftar",
-        "Prioritas dan target setiap unit",
-        "Arahan, PIC, tenggat dan bukti",
-        "Persetujuan kebutuhan & pemenuhan",
-        "Kelengkapan dan kebaruan data",
-        "Laporan rapat gabungan PDF",
-      ],
-    },
-  ];
-  const change = async (plan: string) => {
-    setBusy(true);
-    try {
-      await api("/api/demo-plan", { plan });
-      await reload();
-      toast(`Paket demo ${plan} aktif. Tidak ada transaksi atau langganan.`);
-    } catch (e) {
-      toast((e as Error).message, true);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <>
-      <PageHead
-        title="Pilih manfaat sesuai kebutuhan"
-        description="Bandingkan paket melalui contoh alur yang benar-benar dapat dicoba."
-      />
-      <div className="callout blue">
-        <ShieldCheck size={22} />
-        <p>
-          <strong>Harga ilustrasi untuk demo, belum penawaran resmi.</strong>{" "}
-          Harga akhir, kuota siswa, kapasitas penyimpanan dan pendampingan perlu
-          disepakati. Tidak ada transaksi atau penagihan pada halaman ini.
-        </p>
-      </div>
-      <div className="package-grid">
-        {plans.map((p, i) => (
-          <Panel
-            key={p.name}
-            className={p.name === "Pro" ? "package-featured" : ""}
-          >
-            <Badge tone={i === 1 ? "green" : "blue"}>{p.name}</Badge>
-            <h2>{p.promise}</h2>
-            <div className="package-price">
-              {currency(prices[i])}
-              <small>{p.unit}</small>
-            </div>
-            <ul>
-              {p.features.map((f) => (
-                <li key={f}>
-                  <CheckCircle2 size={16} />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            {i < 2 && user.role !== "foundation" ? (
-              <Button
-                disabled={busy || active === p.name}
-                variant={i === 1 ? "primary" : "secondary"}
-                onClick={() => change(p.name)}
-              >
-                {active === p.name ? "Sedang dicoba" : `Coba ${p.name} di demo`}
-              </Button>
-            ) : (
-              <p className="card-copy">
-                {user.role === "foundation" && i === 2
-                  ? "Pengalaman Yayasan sedang tersedia dalam demo."
-                  : "Paket ditentukan sesuai kebutuhan sekolah dan pengurus."}
-              </p>
-            )}
-          </Panel>
-        ))}
-      </div>
-      <Panel title="Apa manfaat tambahan Pro?">
-        <div className="package-value">
-          <h3>
-            Selisih ilustrasi {currency(prices[1] - prices[0])} per sekolah /
-            bulan
-          </h3>
-          <p>
-            Periksa kasus melewati tenggat, bandingkan perkembangan
-            antarsemes­ter, dan gunakan kembali tampilan laporan tanpa menyusun
-            ulang Excel. Besarnya penghematan waktu perlu diukur di sekolah;
-            demo tidak mengklaim persentase penghematan tertentu.
-          </p>
-          <p>
-            Ekspor, backup dasar, pembatasan akses, serta keamanan akun menjadi
-            bagian dari semua paket. Tidak ada AI, chat, payment gateway, email
-            atau WhatsApp integration.
-          </p>
-        </div>
-      </Panel>
-    </>
-  );
-}
+export { Pricing as Packages } from "./Pricing";
 
 export function ProAnalysis() {
   const { data, user, go, reload, toast } = useApp();
@@ -1200,9 +1134,9 @@ export function ProAnalysis() {
         <Panel title="Analisis lanjutan tersedia pada Pro">
           <div className="package-value">
             <p>
-              Absensi, nilai, rapor, EWS dasar dan ekspor tetap tersedia di
-              Standard. Analisis lintas semester dan tampilan laporan tersimpan
-              dapat dicoba pada paket Pro.
+              Absensi, nilai, rapor dan ekspor tetap tersedia di Standard.
+              EWS, analisis lintas semester dan pemantauan hasil tindak lanjut
+              tersedia khusus Pro dan Yayasan.
             </p>
             {["principal", "admin"].includes(user.role) ? (
               <Button onClick={() => go("packages")}>Bandingkan paket</Button>

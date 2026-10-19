@@ -5,6 +5,8 @@ import {
   roleNames,
   rolePhotos,
   roleResponsibilities,
+  isPro,
+  isFoundation,
   type Row,
 } from "./model";
 import { Avatar, Brand, Button } from "./ui";
@@ -12,14 +14,18 @@ export function DemoWelcome({
   onChoose,
   onSkip,
 }: {
-  onChoose: (role: string, homeroom?: boolean) => Promise<void>;
-  onSkip: () => void;
+  onChoose: (role: string, homeroom?: boolean, plan?: string) => Promise<void>;
+  onSkip: (plan: string) => Promise<void>;
 }) {
+  const { data, toast } = useApp();
+  const [plan, setPlan] = useState(data.settings[0]?.plan || "Pro");
   const [busy, setBusy] = useState(false);
   const choose = async (role: string, h = false) => {
     setBusy(true);
     try {
-      await onChoose(role, h);
+      await onChoose(role, h, plan);
+    } catch (e) {
+      toast((e as Error).message, true);
     } finally {
       setBusy(false);
     }
@@ -56,18 +62,35 @@ export function DemoWelcome({
               Akses sesuai tanggung jawab
             </span>
           </div>
-          <Button variant="ghost" disabled={busy} onClick={onSkip}>
+          <label className="welcome-plan-select">
+            Paket demo awal
+            <select value={plan} disabled={busy} onChange={(event) => setPlan(event.target.value)}>
+              <option>Standard</option><option>Pro</option><option>Yayasan</option>
+            </select>
+          </label>
+          <p className="welcome-plan-note">
+            {plan === "Standard" ? "Standard: kegiatan sekolah sehari-hari beres. EWS tersedia pada Pro dan Yayasan."
+              : plan === "Pro" ? "Pro: telusuri risiko, tetapkan PIC dan tenggat, lalu evaluasi hasil penanganan."
+              : "Yayasan: lihat prioritas, arahan dan perkembangan seluruh unit."}
+            {" "}Berganti paket mempertahankan data percobaan dan hak tiap peran.
+          </p>
+          <Button variant="ghost" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { await onSkip(plan); }
+            catch (e) { toast((e as Error).message, true); }
+            finally { setBusy(false); }
+          }}>
             Jelajahi tanpa panduan
             <ArrowRight size={16} />
           </Button>
         </div>
         <div className="welcome-roles">
           {Object.entries(roleNames).map(([role, name]) => (
-            <button key={role} disabled={busy} onClick={() => choose(role)}>
+            <button key={role} disabled={busy || (role === "foundation" && plan !== "Yayasan")} onClick={() => choose(role)}>
               <Avatar photo={rolePhotos[role]} size={45} />
               <div>
                 <strong>{name}</strong>
-                <small>{roleResponsibilities[role]}</small>
+                <small>{role === "foundation" && plan !== "Yayasan" ? "Pilih paket Yayasan untuk mencoba pengelolaan lintas unit." : roleResponsibilities[role]}</small>
               </div>
               <ArrowRight size={16} />
             </button>
@@ -77,8 +100,7 @@ export function DemoWelcome({
             <div>
               <strong>Guru + wali kelas</strong>
               <small>
-                Pendampingan, evaluasi hasil, dan validasi rapor kelas
-                perwalian.
+                P5 dan rapor kelas perwalian; pada Pro/Yayasan termasuk pendampingan dan evaluasi hasil.
               </small>
             </div>
             <ArrowRight size={16} />
@@ -90,7 +112,7 @@ export function DemoWelcome({
 }
 const scenarios: Record<
   string,
-  { title: string; page: string; id?: string; event: string; hint: string }[]
+  { title: string; page: string; id?: string; event: string; hint: string; status?: string }[]
 > = {
   principal: [
     {
@@ -104,6 +126,13 @@ const scenarios: Record<
       page: "interventions",
       event: "/api/interventions",
       hint: "Tetapkan PIC, target evaluasi dan hasil yang diharapkan.",
+    },
+    {
+      title: "Evaluasi hasil pendampingan",
+      page: "interventions",
+      event: "/api/interventions",
+      status: "Selesai",
+      hint: "Buka rencana, catat hasil dan bukti evaluasi, lalu tandai selesai.",
     },
     {
       title: "Unduh rapor sebagai hasil nyata",
@@ -234,28 +263,37 @@ const scenarios: Record<
   ],
 };
 export function DemoTour() {
-  const { user, go } = useApp();
+  const { user, data, go } = useApp();
+  const plan = data.settings[0]?.plan || "Pro";
   const [active, setActive] = useState(false),
     [step, setStep] = useState(0);
-  const list = scenarios[user.role] || [],
+  const standardPrincipal = [
+    { title: "Tinjau kehadiran harian", page: "attendance", event: "route:attendance", hint: "Periksa catatan kehadiran kelas pada hari yang dipilih." },
+    { title: "Periksa kelengkapan rapor", page: "reports", event: "route:reports", hint: "Tinjau capaian dan kelengkapan nilai sebelum rapor diterbitkan." },
+    { title: "Unduh rapor sekolah", page: "reports", event: "download:report", hint: "Buka rapor terbit dan unduh PDF sebagai hasil pekerjaan." },
+  ];
+  const list: { title: string; page: string; id?: string; event: string; hint: string; status?: string }[] =
+    user.role === "principal" && !isPro(data.settings[0]) ? standardPrincipal
+      : user.role === "foundation" && !isFoundation(data.settings[0]) ? [] : scenarios[user.role] || [],
     item = list[step];
   useEffect(() => {
     setStep(0);
     setActive(false);
-  }, [user.role, user.isHomeroom]);
+  }, [user.role, user.isHomeroom, plan]);
   useEffect(() => {
     const start = () => {
+      if (!list.length) { go("packages"); return; }
       setStep(0);
       setActive(true);
     };
     window.addEventListener("kk:tour", start);
     return () => window.removeEventListener("kk:tour", start);
-  }, []);
+  }, [user.role, plan]);
   useEffect(() => {
     if (!active || !item) return;
     const action = (e: Event) => {
       const path = (e as CustomEvent).detail?.path || "";
-      if (path.startsWith(item.event)) setStep((s) => s + 1);
+      if (path.startsWith(item.event) && (!item.status || (e as CustomEvent).detail?.result?.status === item.status)) setStep((s) => s + 1);
     };
     window.addEventListener("kk:action", action);
     return () => window.removeEventListener("kk:action", action);

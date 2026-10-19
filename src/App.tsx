@@ -1,6 +1,7 @@
 import { Board, UnitWork, Packages, ProAnalysis, Workflow } from "./Product";
 import { GateDashboard, GateScan, GateHistory, GateIncidents } from "./Gate";
 import { DemoWelcome, DemoTour } from "./Experience";
+import { FoundationPlanRequired } from "./PlanExperience";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -36,6 +37,7 @@ import {
   roleResponsibilities,
   rolePhotos,
   canAccessPage,
+  isFoundation,
   displayRole,
   risk,
   type Row,
@@ -114,6 +116,7 @@ export async function api(url: string, body?: unknown, method = "POST") {
               ? "#" + (body as { kind: string }).kind
               : ""),
           method,
+          result,
         },
       }),
     );
@@ -362,7 +365,7 @@ export default function App() {
       return (
         <Empty
           title="Halaman tidak tersedia untuk peran ini"
-          description="Gunakan menu yang sesuai dengan tugas dan hak aksesmu."
+          description="Gunakan menu sesuai tugas dan hak aksesmu. Fitur EWS memerlukan Pro atau Yayasan; pengelolaan lintas unit memerlukan Yayasan."
           action={
             <Button onClick={() => go("dashboard")}>
               Kembali ke ringkasan
@@ -375,7 +378,7 @@ export default function App() {
         return isPersonal ? (
           <PersonalDashboard />
         ) : user.role === "foundation" ? (
-          <Board />
+          isFoundation(data.settings[0]) ? <Board /> : <FoundationPlanRequired />
         ) : user.role === "security" ? (
           <GateDashboard />
         ) : user.role === "admin" ? (
@@ -598,7 +601,7 @@ export default function App() {
                 {data.settings[0]?.year || "2026/2027"} <span>•</span>
                 {data.settings[0]?.semester || "Ganjil"}
               </span>
-              {canAccessPage(user, "announcements") && (
+              {canAccessPage(user, "announcements", data.settings[0]) && (
                 <button
                   className="notification-btn icon-btn"
                   aria-label="Buka notifikasi"
@@ -617,8 +620,33 @@ export default function App() {
               </button>
             </div>
           </header>
+          <div className="demo-plan-strip">
+            <div className="demo-plan-status" aria-live="polite">
+              <span className="demo-label">DEMO</span>
+              <strong>Sedang mencoba {data.settings[0]?.plan || "Pro"}</strong>
+              <span className="demo-plan-description">Data contoh · akses mengikuti peran</span>
+            </div>
+            {["principal", "admin", "foundation"].includes(user.role) && (
+              <label className="demo-plan-select">
+                Ganti paket demo
+                <select value={data.settings[0]?.plan || "Pro"} disabled={switching}
+                  onChange={async (event) => {
+                    const plan = event.target.value;
+                    setSwitching(true);
+                    try {
+                      await save("demo-plan", { plan }, true);
+                      if (!canAccessPage(user, route.page, { ...data.settings[0], plan })) go("dashboard");
+                      toast(`Sedang mencoba ${plan}. Data demo tetap tersimpan.`);
+                    } catch (e) { toast((e as Error).message, true); }
+                    finally { setSwitching(false); }
+                  }}>
+                  <option>Standard</option><option>Pro</option><option>Yayasan</option>
+                </select>
+              </label>
+            )}
+          </div>
           <main
-            key={`${route.page}-${user.school}-${displayRole(user)}`}
+            key={`${route.page}-${user.school}-${displayRole(user)}-${data.settings[0]?.plan}`}
             className="content"
           >
             {content()}
@@ -653,12 +681,16 @@ export default function App() {
         <DemoTour />
         {welcome && (
           <DemoWelcome
-            onSkip={() => {
+            onSkip={async (plan) => {
+              await api("/api/session", { role: user.role, school: user.school, isHomeroom: user.isHomeroom, plan });
+              await reload();
               localStorage.setItem("kk-welcome-v3", "seen");
               setWelcome(false);
             }}
-            onChoose={async (role, h) => {
-              await setRole(role, undefined, h);
+            onChoose={async (role, h, plan) => {
+              await api("/api/session", { role, school: user.school, isHomeroom: !!h, plan });
+              await reload();
+              go("dashboard");
               localStorage.setItem("kk-welcome-v3", "seen");
               setWelcome(false);
               setTimeout(() => window.dispatchEvent(new Event("kk:tour")), 50);
@@ -779,7 +811,7 @@ export default function App() {
             </div>
             <div className="search-results">
               {search &&
-                (canAccessPage(user, "students") || isPersonal) &&
+                (canAccessPage(user, "students", data.settings[0]) || isPersonal) &&
                 data.students
                   .filter(
                     (s) =>
@@ -792,10 +824,10 @@ export default function App() {
                       key={s.id}
                       onClick={() => {
                         go(
-                          canAccessPage(user, "students")
+                          canAccessPage(user, "students", data.settings[0])
                             ? "students"
                             : "dashboard",
-                          canAccessPage(user, "students") ? s.id : "",
+                          canAccessPage(user, "students", data.settings[0]) ? s.id : "",
                         );
                         setSearchOpen(false);
                       }}
@@ -859,7 +891,7 @@ export default function App() {
                 <ChevronRight size={17} />
               </button>
             ))}
-            {canAccessPage(user, "ews") && (
+            {canAccessPage(user, "ews", data.settings[0]) && (
               <button
                 className="notification-row"
                 onClick={() => {

@@ -1,5 +1,6 @@
 import { TodayWork } from "./Product";
 import { SchoolReminders } from "./Operations";
+import { ProExample } from "./PlanExperience";
 import {
   Activity,
   ArrowDown,
@@ -40,6 +41,7 @@ import {
   canIntervene,
   liveDate,
   greeting,
+  isPro,
 } from "./model";
 import {
   Avatar,
@@ -55,12 +57,13 @@ import {
 import { useState } from "react";
 export default function Dashboard() {
   const { data, user, go } = useApp();
+  const pro = isPro(data.settings[0]);
   const [period, setPeriod] = useState("semester");
   const [classId, setClassId] = useState("all");
   const students = data.students.filter(
     (s) => classId === "all" || s.classId === classId,
   );
-  const risks = students
+  const risks = (pro ? students : [])
     .map(
       (s) => ({ ...s, ...risk(s, data) }) as typeof s & ReturnType<typeof risk>,
     )
@@ -121,7 +124,8 @@ export default function Dashboard() {
           </>
         }
       />
-      <section className="ews-overview" aria-label="Prioritas Early Warning">
+      <ProExample />
+      {pro && <section className="ews-overview" aria-label="Prioritas Early Warning">
         <span className="ews-overview-icon">
           <Activity size={30} />
         </span>
@@ -140,26 +144,26 @@ export default function Dashboard() {
           Lihat prioritas
           <ArrowRight size={17} />
         </Button>
-      </section>
+      </section>}
       {user.role === "teacher" && <SchoolReminders />}
       <TodayWork />
       <div className="section-toolbar">
         <div className="tab-inline">
           <button className="active">Ringkasan sekolah</button>
-          <button onClick={() => go("ews")}>
+          {pro && <button onClick={() => go("ews")}>
             Perlu perhatian <span>{risks.length}</span>
-          </button>
+          </button>}
         </div>
         <div className="toolbar-right">
           <ClassSelect value={classId} onChange={setClassId} />
-          <select
+          {pro && <select
             aria-label="Periode grafik"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
           >
             <option value="semester">Semester ini</option>
             <option value="recent">3 bulan terakhir</option>
-          </select>
+          </select>}
         </div>
       </div>
       <div className="metrics">
@@ -180,7 +184,7 @@ export default function Dashboard() {
             </>
           }
           icon={GraduationCap}
-          change="Stabil"
+          change="Semester ini"
           note="pada semester berjalan"
           tone="blue"
           onClick={() => go("attendance")}
@@ -194,12 +198,12 @@ export default function Dashboard() {
             </>
           }
           icon={TrendingUp}
-          change={`+${number(avg(students.map((s) => (s.history?.at(-1) || 0) - (s.history?.[0] || 0))))} poin`}
-          note="dibanding awal semester"
+          change={pro ? `+${number(avg(students.map((s) => (s.history?.at(-1) || 0) - (s.history?.[0] || 0))))} poin` : `${data.grades.filter((g) => students.some((s) => s.id === g.studentId)).length} nilai tercatat`}
+          note={pro ? "dibanding awal semester" : "pada semester berjalan"}
           tone="purple"
           onClick={() => go("grades")}
         />
-        <Metric
+        {pro ? <Metric
           label="Siswa perlu perhatian"
           value={risks.length}
           icon={Activity}
@@ -207,10 +211,10 @@ export default function Dashboard() {
           note="perlu ditindaklanjuti"
           tone="amber"
           onClick={() => go("ews")}
-        />
+        /> : <Metric label="Rapor terbit" value={published} icon={FileCheck2} change={`${reports.length} rapor tercatat`} note="siap dibagikan kepada keluarga" tone="amber" onClick={() => go("reports")} />}
       </div>
       <div className="dashboard-main-grid">
-        <Panel
+        {pro ? <Panel
           title="Perkembangan akademik"
           subtitle="Langkah kecil menuju capaian yang lebih baik"
           action={
@@ -301,7 +305,12 @@ export default function Dashboard() {
               Lihat analisis <ArrowUpRight size={14} />
             </button>
           </div>
-        </Panel>
+        </Panel> : <Panel title="Kegiatan sekolah hari ini" subtitle="Selesaikan pencatatan dan pembelajaran sehari-hari.">
+          <div className="parent-insights">
+            <div><span className="heading-icon blue"><CalendarDays size={20} /></span><div><h3>Kehadiran siswa</h3><p>Rata-rata kehadiran tercatat {attendance}%. Buka daftar kelas untuk mencatat kehadiran hari ini.</p><Button variant="secondary" onClick={() => go("attendance")}>Kelola kehadiran <ArrowRight size={15} /></Button></div></div>
+            <div><span className="heading-icon teal"><BookOpen size={20} /></span><div><h3>Nilai dan tugas</h3><p>Rata-rata nilai saat ini {average}/100. Perbarui penilaian dan bagikan tugas sesuai kelas yang dikelola.</p><Button variant="secondary" onClick={() => go("grades")}>Kelola nilai <ArrowRight size={15} /></Button></div></div>
+          </div>
+        </Panel>}
         <Panel
           title={
             <>
@@ -315,7 +324,7 @@ export default function Dashboard() {
           action={<span className="tiny-label">HARI INI</span>}
           className="priorities"
         >
-          <button onClick={() => go("ews")}>
+          {pro && <button onClick={() => go("ews")}>
             <span className="priority-icon red">
               <Users size={18} />
             </span>
@@ -327,7 +336,7 @@ export default function Dashboard() {
               <p>Penurunan nilai & kehadiran</p>
             </div>
             <ChevronRight size={17} />
-          </button>
+          </button>}
           <button onClick={() => go("reports")}>
             <span className="priority-icon amber">
               <FileCheck2 size={18} />
@@ -341,7 +350,7 @@ export default function Dashboard() {
             </div>
             <ChevronRight size={17} />
           </button>
-          {canIntervene(user) && (
+          {pro && canIntervene(user) && (
             <button onClick={() => go("interventions")}>
               <span className="priority-icon blue">
                 <Clock3 size={18} />
@@ -364,15 +373,15 @@ export default function Dashboard() {
               <ShieldCheck size={20} />
             </span>
             <p>
-              Perhatian lebih awal.
+              {pro ? "Perhatian lebih awal." : "Pencatatan yang teratur."}
               <br />
-              <strong>Kesempatan tumbuh lebih besar.</strong>
+              <strong>{pro ? "Kesempatan tumbuh lebih besar." : "Belajar berjalan lebih lancar."}</strong>
             </p>
           </div>
         </Panel>
       </div>
-      <div className="dashboard-lower-grid">
-        <Panel
+      <div className="dashboard-lower-grid" style={!pro ? {gridTemplateColumns: "1fr"} : undefined}>
+        {pro && <Panel
           title={
             <>
               Siswa dalam perhatian <Badge tone="amber">Early Warning</Badge>
@@ -438,7 +447,7 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-        </Panel>
+        </Panel>}
         <Panel
           title="Kesiapan rapor"
           subtitle="Setiap capaian layak dirayakan."

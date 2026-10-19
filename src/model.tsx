@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import { isPro as planHasEws } from "../shared/access.mjs";
 export type Row = { id: string; [key: string]: any };
 export type User = {
   role: string;
@@ -36,6 +37,7 @@ export {
   roleNames,
   roleResponsibilities,
   isPro,
+  isFoundation,
   canPublishReport,
   canAccessPage,
   canManageSchool,
@@ -76,6 +78,8 @@ export const avg = (arr: number[]) =>
 export function risk(student: Row, data: Record<string, Row[]>) {
   const settings = data.settings?.[0] || {};
   const grades = (data.grades || []).filter((g) => g.studentId === student.id);
+  if (!planHasEws(settings))
+    return { enabled: false, level: "Rendah", reasons: [] as string[], score: avg(grades.map((g) => g.score)), drop: 0 };
   const drop = student.history?.[0] - student.history?.at(-1) || 0;
   const reasons = [];
   if (student.attendance < (settings.ewsAttendance || 80))
@@ -91,6 +95,7 @@ export function risk(student: Row, data: Record<string, Row[]>) {
       `${grades.filter((g) => g.score < (settings.kkm || 75)).length} mata pelajaran di bawah KKM`,
     );
   return {
+    enabled: true,
     level:
       reasons.length >= 3 ? "Tinggi" : reasons.length ? "Sedang" : "Rendah",
     reasons,

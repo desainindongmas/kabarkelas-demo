@@ -22,8 +22,13 @@ export const roleResponsibilities: Record<string, string>;
 export const pagesByRole: Record<string, string[]>;
 export const collectionsByRole: Record<string, string[]>;
 export const administrativeBackupKinds: string[];
-export function canReadCollection(user: AccessUser, kind: string): boolean;
+export function canReadCollection(
+  user: AccessUser,
+  kind: string,
+  settings?: Record<string, any>,
+): boolean;
 export function isPro(settings?: Record<string, any>): boolean;
+export function isFoundation(settings?: Record<string, any>): boolean;
 export function canPublishReport(
   user: AccessUser,
   report?: Record<string, any>,

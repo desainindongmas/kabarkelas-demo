@@ -1,4 +1,5 @@
 import { TodayWork } from "./Product";
+import { ProExample } from "./PlanExperience";
 import { useState } from "react";
 import {
   Activity,
@@ -1816,6 +1817,7 @@ export function AdminDashboard() {
         }
       />
       <TodayWork />
+      <ProExample />
       <div className="metrics four">
         <Metric
           label="Siswa aktif"

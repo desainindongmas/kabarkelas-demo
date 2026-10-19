@@ -268,6 +268,30 @@ const optional = {
   tahfizh: "tahfizh",
   admissions: "admissions",
 };
+const proPages = new Set([
+  "ews",
+  "below-kkm",
+  "interventions",
+  "analytics",
+  "workflow",
+]);
+const foundationPages = new Set([
+  "foundation",
+  "board-actions",
+  "unit-needs",
+  "meeting",
+  "unit-work",
+]);
+const proCollections = new Set([
+  "interventions",
+  "termSnapshots",
+  "savedReports",
+]);
+const foundationCollections = new Set([
+  "foundationTasks",
+  "unitNeeds",
+  "schoolTargets",
+]);
 export function canAccessPage(user, page, settings) {
   if (!user) return false;
   const allowed =
@@ -277,16 +301,29 @@ export function canAccessPage(user, page, settings) {
       ["interventions", "character", "tahfizh"].includes(page));
   return (
     !!allowed &&
+    (!proPages.has(page) || isPro(settings)) &&
+    (!foundationPages.has(page) || isFoundation(settings)) &&
     (!optional[page] ||
       !settings?.enabledModules ||
       settings.enabledModules.includes(optional[page]))
   );
 }
-export function canReadCollection(user, kind) {
-  return !!collectionsByRole[user?.role]?.includes(kind);
+export function canReadCollection(user, kind, settings) {
+  return (
+    !!collectionsByRole[user?.role]?.includes(kind) &&
+    (!settings || !proCollections.has(kind) || isPro(settings)) &&
+    (!settings || !foundationCollections.has(kind) || isFoundation(settings)) &&
+    (!settings ||
+      user?.role !== "foundation" ||
+      kind === "settings" ||
+      isFoundation(settings))
+  );
 }
 export function isPro(settings) {
   return ["Pro", "Yayasan"].includes(settings?.plan || "Pro");
+}
+export function isFoundation(settings) {
+  return settings?.plan === "Yayasan";
 }
 export function canEditAcademic(user) {
   return user?.role === "teacher";
