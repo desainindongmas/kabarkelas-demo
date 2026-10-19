@@ -42,6 +42,8 @@ import {
 } from "recharts";
 import {
   avg,
+  isPro,
+  todayWIB,
   canIntervene,
   canReviewReport,
   date,
@@ -326,7 +328,7 @@ export function InterventionForm({
           studentId,
           pic: data.teachers[0]?.name,
           status: "Direncanakan",
-          due: "2026-10-31",
+          due: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
         }
       }
       onClose={onClose}
@@ -345,6 +347,11 @@ export function InterventionForm({
         },
         { key: "due", label: "Target evaluasi", type: "date", required: true },
         {
+          key: "expectedOutcome",
+          label: "Hasil yang diharapkan",
+          type: "textarea",
+        },
+        {
           key: "status",
           label: "Status",
           required: true,
@@ -352,6 +359,18 @@ export function InterventionForm({
             value: s,
             label: s,
           })),
+        },
+        {
+          key: "outcome",
+          label: "Hasil evaluasi (wajib saat selesai)",
+          options: ["Membaik", "Belum berubah", "Perlu lanjutan"].map(
+            (value) => ({ value, label: value }),
+          ),
+        },
+        {
+          key: "evaluationNote",
+          label: "Catatan evaluasi (wajib saat selesai)",
+          type: "textarea",
         },
         {
           key: "note",
@@ -398,9 +417,16 @@ export function EarlyWarning() {
         description="Temukan sinyal, pahami penyebab, dan hadirkan pendampingan yang tepat."
         action={
           user.role === "principal" ? (
-            <Button variant="secondary" onClick={() => setRules(true)}>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                isPro(data.settings[0]) ? setRules(true) : go("packages")
+              }
+            >
               <Activity size={16} />
-              Aturan EWS
+              {isPro(data.settings[0])
+                ? "Aturan EWS"
+                : "Aturan dasar · lihat Pro"}
             </Button>
           ) : undefined
         }
@@ -773,7 +799,11 @@ export function StudentDetail() {
           "Pendampingan",
           "Profil",
         ]
-          .filter((t) => t !== "Pendampingan" || canIntervene(user))
+          .filter(
+            (t) =>
+              (t !== "Pendampingan" || canIntervene(user)) &&
+              (t !== "Profil" || user.role !== "teacher" || user.isHomeroom),
+          )
           .map((t) => (
             <button
               className={tab === t ? "active" : ""}
@@ -1163,14 +1193,16 @@ export function StudentDetail() {
   );
 }
 export function Interventions() {
-  const { data, user, go } = useApp();
+  const { data, user, go, selectedId } = useApp();
   const [filter, setFilter] = useState("all"),
+    [overdue, setOverdue] = useState(selectedId === "overdue"),
     [edit, setEdit] = useState<Row | undefined>(),
     [add, setAdd] = useState(false),
     [student, setStudent] = useState(data.students[0]?.id || "");
   const rows = data.interventions.filter(
     (i) =>
       (filter === "all" || i.status === filter) &&
+      (!overdue || (i.status !== "Selesai" && i.due < todayWIB())) &&
       (user.role !== "teacher" ||
         data.students.find((s) => s.id === i.studentId)?.classId ===
           user.homeroomClassId),
@@ -1190,6 +1222,24 @@ export function Interventions() {
           ) : undefined
         }
       />
+      <div className="intervention-summary">
+        <Badge tone="green">
+          {
+            data.interventions.filter(
+              (i) => i.status === "Selesai" && i.outcome === "Membaik",
+            ).length
+          }{" "}
+          pendampingan dievaluasi membaik
+        </Badge>
+        <label>
+          <input
+            type="checkbox"
+            checked={overdue}
+            onChange={(e) => setOverdue(e.target.checked)}
+          />
+          Hanya yang melewati tenggat
+        </label>
+      </div>
       <div className="tabs">
         {["all", "Direncanakan", "Berjalan", "Selesai"].map((f) => (
           <button
@@ -1233,6 +1283,37 @@ export function Interventions() {
                 <ArrowUpRight size={14} />
               </button>
               <p className="card-copy">{i.note}</p>
+              <p className="card-copy">
+                <strong>Target:</strong> {i.expectedOutcome || "Belum dicatat"}
+              </p>
+              {i.status !== "Selesai" && i.due < todayWIB() && (
+                <Badge tone="red">Evaluasi melewati tenggat</Badge>
+              )}
+              {i.status === "Selesai" && (
+                <div className="evaluation-result">
+                  <Badge tone={i.outcome === "Membaik" ? "green" : "amber"}>
+                    {i.outcome || "Sudah dievaluasi"}
+                  </Badge>
+                  <p>{i.evaluationNote}</p>
+                  <div>
+                    <span>
+                      Kehadiran {i.baselineAttendance ?? "—"}% →{" "}
+                      {i.afterAttendance ?? "—"}%
+                    </span>
+                    <span>
+                      Nilai {i.baselineScore ?? "—"} → {i.afterScore ?? "—"}
+                    </span>
+                    <span>
+                      Tugas tertunda {i.baselineOverdue ?? "—"} →{" "}
+                      {i.afterOverdue ?? "—"}
+                    </span>
+                  </div>
+                  <small>
+                    Snapshot nilai dan kehadiran saat evaluasi tersimpan, bukan
+                    klaim hubungan sebab-akibat.
+                  </small>
+                </div>
+              )}
               <div className="intervention-meta">
                 <span>
                   <UserRound size={14} />
@@ -1301,7 +1382,9 @@ export function Interventions() {
                   studentId: student,
                   title: "",
                   pic: data.teachers[0]?.name,
-                  due: "2026-10-31",
+                  due: new Date(Date.now() + 7 * 86400000)
+                    .toISOString()
+                    .slice(0, 10),
                   status: "Direncanakan",
                   note: "",
                 });

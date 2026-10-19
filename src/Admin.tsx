@@ -1,3 +1,4 @@
+import { TodayWork } from "./Product";
 import { useState } from "react";
 import {
   Activity,
@@ -51,6 +52,8 @@ import {
   number,
   roleNames,
   useApp,
+  greeting,
+  roleResponsibilities,
   type Row,
 } from "./model";
 import {
@@ -731,11 +734,18 @@ function ImportWizard({ onClose }: { onClose: () => void }) {
 }
 
 export function Finance() {
-  const { data, user, school, save } = useApp();
+  const { data, user, school, save, reload, toast, selectedId } = useApp();
   const [status, setStatus] = useState("all"),
     [query, setQuery] = useState(""),
     [payment, setPayment] = useState<Row | null>(null),
-    [add, setAdd] = useState(false);
+    [add, setAdd] = useState(false),
+    [paymentPage, setPaymentPage] = useState(1),
+    [onlyOverdue, setOnlyOverdue] = useState(selectedId === "overdue"),
+    [bulk, setBulk] = useState(false),
+    [collect, setCollect] = useState(false),
+    [cls, setCls] = useState("all"),
+    [page, setPage] = useState(1),
+    [selected, setSelected] = useState<Set<string>>(new Set());
   const admin = user.role === "admin";
   const paidOf = (i: Row) =>
     i.paidAmount ?? (i.status === "Lunas" ? i.amount : 0);
@@ -744,6 +754,14 @@ export function Finance() {
   const rows = data.invoices.filter(
     (i) =>
       (status === "all" || i.status === status) &&
+      (!onlyOverdue ||
+        (i.status !== "Lunas" &&
+          i.due <=
+            new Date().toLocaleDateString("en-CA", {
+              timeZone: "Asia/Jakarta",
+            }))) &&
+      (cls === "all" ||
+        data.students.find((s) => s.id === i.studentId)?.classId === cls) &&
       `${i.title} ${data.students.find((s) => s.id === i.studentId)?.name}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -774,6 +792,11 @@ export function Finance() {
                 )
               }
             />
+            {admin && (
+              <Button variant="secondary" onClick={() => setBulk(true)}>
+                Buat tagihan kelas
+              </Button>
+            )}
             {admin && (
               <Button onClick={() => setAdd(true)}>
                 <Plus size={16} />
@@ -810,6 +833,28 @@ export function Finance() {
         title="Tagihan siswa"
         action={
           <div className="operation-actions">
+            {admin && (
+              <label className="inline-filter">
+                <input
+                  type="checkbox"
+                  checked={onlyOverdue}
+                  onChange={(e) => {
+                    setOnlyOverdue(e.target.checked);
+                    setPage(1);
+                  }}
+                />
+                Jatuh tempo saja
+              </label>
+            )}
+            {admin && (
+              <ClassSelect
+                value={cls}
+                onChange={(v) => {
+                  setCls(v);
+                  setPage(1);
+                }}
+              />
+            )}
             <SearchBox
               value={query}
               onChange={setQuery}
@@ -828,10 +873,50 @@ export function Finance() {
           </div>
         }
       >
+        {admin && selected.size > 0 && (
+          <div className="batch-toolbar">
+            <strong>{selected.size} tagihan dipilih</strong>
+            <Button onClick={() => setCollect(true)}>
+              Catat penerimaan terpilih
+            </Button>
+            <Button variant="ghost" onClick={() => setSelected(new Set())}>
+              Bersihkan
+            </Button>
+          </div>
+        )}
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
+                {admin && (
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="Pilih tagihan pada halaman"
+                      checked={
+                        rows
+                          .slice((page - 1) * 20, page * 20)
+                          .filter((i) => i.amount > paidOf(i)).length > 0 &&
+                        rows
+                          .slice((page - 1) * 20, page * 20)
+                          .filter((i) => i.amount > paidOf(i))
+                          .every((i) => selected.has(i.id))
+                      }
+                      onChange={(e) => {
+                        const next = new Set(selected);
+                        rows
+                          .slice((page - 1) * 20, page * 20)
+                          .filter((i) => i.amount > paidOf(i))
+                          .forEach((i) =>
+                            e.target.checked
+                              ? next.add(i.id)
+                              : next.delete(i.id),
+                          );
+                        setSelected(next);
+                      }}
+                    />
+                  </th>
+                )}
                 <th>Siswa / tagihan</th>
                 <th>Jatuh tempo</th>
                 <th>Nominal</th>
@@ -842,8 +927,23 @@ export function Finance() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((i) => (
+              {rows.slice((page - 1) * 20, page * 20).map((i) => (
                 <tr key={i.id}>
+                  {admin && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Pilih tagihan ${i.title} ${data.students.find((s) => s.id === i.studentId)?.name}`}
+                        disabled={i.amount <= paidOf(i)}
+                        checked={selected.has(i.id)}
+                        onChange={(e) => {
+                          const next = new Set(selected);
+                          e.target.checked ? next.add(i.id) : next.delete(i.id);
+                          setSelected(next);
+                        }}
+                      />
+                    </td>
+                  )}
                   <td>
                     <strong>
                       {data.students.find((s) => s.id === i.studentId)?.name}
@@ -879,6 +979,12 @@ export function Finance() {
           </table>
         </div>
         {!rows.length && <Empty title="Tidak ada tagihan pada filter ini" />}
+        <Pagination
+          page={page}
+          total={rows.length}
+          size={20}
+          onChange={setPage}
+        />
       </Panel>
       <Panel
         title="Riwayat penerimaan"
@@ -900,6 +1006,7 @@ export function Finance() {
               {data.payments
                 .slice()
                 .reverse()
+                .slice((paymentPage - 1) * 20, paymentPage * 20)
                 .map((p) => {
                   const student = data.students.find(
                     (s) => s.id === p.studentId,
@@ -943,6 +1050,12 @@ export function Finance() {
         {!data.payments.length && (
           <Empty title="Belum ada penerimaan tercatat" />
         )}
+        <Pagination
+          page={paymentPage}
+          total={data.payments.length}
+          size={20}
+          onChange={setPaymentPage}
+        />
       </Panel>
       {payment && (
         <FormModal
@@ -1016,6 +1129,90 @@ export function Finance() {
           ]}
           onClose={() => setAdd(false)}
           onSave={(v) => save("invoices", v)}
+        />
+      )}
+      {bulk && (
+        <FormModal
+          title="Buat tagihan satu kelas"
+          initial={{
+            classId: cls === "all" ? data.classes[0]?.id : cls,
+            title: "SPP periode baru",
+            amount: 650000,
+            due: new Date().toISOString().slice(0, 10),
+          }}
+          fields={[
+            {
+              key: "classId",
+              label: "Kelas",
+              options: data.classes.map((c) => ({
+                value: c.id,
+                label: c.name,
+              })),
+              required: true,
+            },
+            {
+              key: "title",
+              label: "Judul tagihan (unik per siswa)",
+              required: true,
+            },
+            {
+              key: "amount",
+              label: "Nominal per siswa (Rp)",
+              type: "number",
+              min: 1,
+              required: true,
+            },
+            { key: "due", label: "Jatuh tempo", type: "date", required: true },
+          ]}
+          onClose={() => setBulk(false)}
+          onSave={async (v) => {
+            const result = await api("/api/invoices/batch", v);
+            await reload();
+            toast(`${result.count} tagihan berhasil dibuat sekaligus.`);
+          }}
+        />
+      )}
+      {collect && (
+        <FormModal
+          title={`Catat pelunasan ${selected.size} tagihan`}
+          initial={{
+            method: "Tunai",
+            paymentDate: new Date().toLocaleDateString("en-CA", {
+              timeZone: "Asia/Jakarta",
+            }),
+          }}
+          fields={[
+            {
+              key: "method",
+              label: "Metode",
+              options: ["Tunai", "Transfer manual"].map((value) => ({
+                value,
+                label: value,
+              })),
+              required: true,
+            },
+            {
+              key: "paymentDate",
+              label: "Tanggal penerimaan",
+              type: "date",
+              required: true,
+            },
+            {
+              key: "note",
+              label:
+                "Konfirmasi uang telah diterima untuk seluruh tagihan terpilih",
+              type: "textarea",
+              required: true,
+            },
+          ]}
+          onClose={() => setCollect(false)}
+          label="Simpan penerimaan sesuai sisa tagihan"
+          onSave={async (v) => {
+            await api("/api/payments/batch", { ...v, ids: [...selected] });
+            await reload();
+            setSelected(new Set());
+            toast("Penerimaan tersimpan. Kuitansi tersedia pada riwayat.");
+          }}
         />
       )}
     </>
@@ -1323,6 +1520,42 @@ export function Settings() {
                       </select>
                     </label>
                     {input("kkm", "KKM default", "number", 0, 100)}
+                    <div className="module-toggles full">
+                      <h4>Modul sesuai kebutuhan sekolah</h4>
+                      {[
+                        ["character", "P5 & karakter"],
+                        ["tahfizh", "Tahfizh & akhlak"],
+                        ["admissions", "Penerimaan siswa baru"],
+                      ].map(([key, label]) => (
+                        <label key={key}>
+                          <input
+                            type="checkbox"
+                            checked={(
+                              values.enabledModules || [
+                                "character",
+                                "tahfizh",
+                                "admissions",
+                              ]
+                            ).includes(key)}
+                            onChange={(e) =>
+                              setValues({
+                                ...values,
+                                enabledModules: e.target.checked
+                                  ? [...(values.enabledModules || []), key]
+                                  : (values.enabledModules || []).filter(
+                                      (m: string) => m !== key,
+                                    ),
+                              })
+                            }
+                          />
+                          {label}
+                        </label>
+                      ))}
+                      <p>
+                        Modul yang dinonaktifkan disembunyikan dari role
+                        terkait. Data lama tetap disimpan.
+                      </p>
+                    </div>
                     <label>
                       Tampilan nilai
                       <select
@@ -1389,50 +1622,18 @@ export function Settings() {
                 </>
               )}
               {tab === "roles" && (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Peran</th>
-                        <th>Cakupan data</th>
-                        <th>Tindakan</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(roleNames).map(([k, v]) => (
-                        <tr key={k}>
-                          <td>
-                            <strong>{v}</strong>
-                          </td>
-                          <td>
-                            {["parent", "student"].includes(k)
-                              ? "Siswa terhubung"
-                              : k === "teacher"
-                                ? "Kelas yang diajar; tambahan kelas perwalian"
-                                : k === "foundation"
-                                  ? "Agregat lintas sekolah"
-                                  : "Sekolah aktif"}{" "}
-                          </td>
-                          <td>
-                            {
-                              {
-                                admin:
-                                  "Data sekolah, SPP manual, presensi guru",
-                                teacher:
-                                  "Nilai, absensi, tugas; persetujuan & P5 jika wali kelas",
-                                principal:
-                                  "Pemantauan akademik, intervensi, persetujuan rapor & izin",
-                                parent:
-                                  "Perkembangan anak, riwayat SPP, penjemput",
-                                student: "Tugas, kuis, hasil belajar",
-                                foundation: "Ringkasan unit sekolah",
-                              }[k]
-                            }{" "}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="role-policy-list">
+                  {Object.entries(roleNames).map(([key, name]) => (
+                    <article key={key}>
+                      <strong>{name}</strong>
+                      <p>{roleResponsibilities[key]}</p>
+                    </article>
+                  ))}
+                  <p>
+                    Wali kelas adalah kemampuan tambahan Guru untuk kelas
+                    perwaliannya. Menu, halaman langsung, tombol dan API
+                    mengikuti batas akses yang sama.
+                  </p>
                 </div>
               )}
               {tab === "audit" && (
@@ -1605,7 +1806,7 @@ export function AdminDashboard() {
     <>
       <PageHead
         eyebrow="ADMINISTRASI YANG TERTATA"
-        title="Selamat datang, Bu Dewi"
+        title={`${greeting()}, Bu Dewi`}
         description="Kelola data sekolah, presensi guru, dan pencatatan keuangan."
         action={
           <Button onClick={() => go("master")}>
@@ -1614,6 +1815,7 @@ export function AdminDashboard() {
           </Button>
         }
       />
+      <TodayWork />
       <div className="metrics four">
         <Metric
           label="Siswa aktif"
@@ -1711,10 +1913,13 @@ export function AdminDashboard() {
 const ClipboardIcon = FileSpreadsheet;
 
 export function Admissions() {
-  const { data, user, save } = useApp();
-  const [filter, setFilter] = useState("all"),
+  const { data, user, save, reload, toast, selectedId } = useApp();
+  const [filter, setFilter] = useState(
+      selectedId === "Diterima" ? "Diterima" : "all",
+    ),
     [query, setQuery] = useState(""),
-    [form, setForm] = useState<Partial<Row> | null>(null);
+    [form, setForm] = useState<Partial<Row> | null>(null),
+    [enroll, setEnroll] = useState<Row | null>(null);
   const rows = data.admissions.filter(
     (a) =>
       (filter === "all" || a.status === filter) &&
@@ -1760,11 +1965,15 @@ export function Admissions() {
             onChange={(e) => setFilter(e.target.value)}
           >
             <option value="all">Semua status</option>
-            {["Verifikasi", "Seleksi", "Diterima", "Tidak diterima"].map(
-              (s) => (
-                <option key={s}>{s}</option>
-              ),
-            )}
+            {[
+              "Verifikasi",
+              "Seleksi",
+              "Diterima",
+              "Tidak diterima",
+              "Terdaftar",
+            ].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
           </select>
         </div>
         <div className="table-scroll">
@@ -1794,7 +2003,15 @@ export function Admissions() {
                     <Badge tone={tone(a.status)}>{a.status}</Badge>
                   </td>
                   <td>
-                    {user.role === "admin" && (
+                    {a.status === "Diterima" && !a.convertedStudentId && (
+                      <Button variant="secondary" onClick={() => setEnroll(a)}>
+                        Daftarkan ke kelas
+                      </Button>
+                    )}
+                    {a.convertedStudentId && (
+                      <Badge tone="green">Sudah menjadi siswa aktif</Badge>
+                    )}
+                    {user.role === "admin" && !a.convertedStudentId && (
                       <Button variant="ghost" onClick={() => setForm(a)}>
                         Tinjau pendaftaran
                       </Button>
@@ -1836,6 +2053,46 @@ export function Admissions() {
               date: v.date || new Date().toISOString(),
             })
           }
+        />
+      )}
+      {enroll && (
+        <FormModal
+          title={`Daftarkan ${enroll.name} ke kelas`}
+          initial={{ classId: data.classes[0]?.id, gender: "P", address: "" }}
+          fields={[
+            {
+              key: "classId",
+              label: "Kelas tujuan",
+              options: data.classes.map((c) => ({
+                value: c.id,
+                label: c.name,
+              })),
+              required: true,
+            },
+            {
+              key: "gender",
+              label: "Jenis kelamin",
+              options: [
+                { value: "L", label: "Laki-laki" },
+                { value: "P", label: "Perempuan" },
+              ],
+              required: true,
+            },
+            {
+              key: "address",
+              label: "Alamat",
+              type: "textarea",
+              required: true,
+            },
+          ]}
+          onClose={() => setEnroll(null)}
+          onSave={async (v) => {
+            await api(`/api/admissions/${enroll.id}/enroll`, v);
+            await reload();
+            toast(
+              "Siswa aktif dan draf rapor berhasil dibuat dari data pendaftaran.",
+            );
+          }}
         />
       )}
     </>

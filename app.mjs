@@ -4,6 +4,8 @@ import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { seed } from "./seed.mjs";
+import { seedProduct } from "./seed-product.mjs";
+import { installProductAPI } from "./product-api.mjs";
 import { seedOperations } from "./seed-operations.mjs";
 import {
   roleNames,
@@ -11,6 +13,9 @@ import {
   canReadAcademic,
   canIntervene,
   canReviewReport,
+  canReadCollection,
+  isPro,
+  administrativeBackupKinds,
 } from "./shared/access.mjs";
 
 const names = {
@@ -20,6 +25,7 @@ const names = {
   parent: "Dian Prameswari",
   student: "Nadia Azzahra",
   foundation: "Hasan Pradana, M.Pd.",
+  security: "Bambang Suryanto",
 };
 const schools = [
   {
@@ -72,6 +78,12 @@ const kinds = [
   "tahfizh",
   "pickupPersons",
   "pickupLogs",
+  "gateIncidents",
+  "foundationTasks",
+  "unitNeeds",
+  "schoolTargets",
+  "termSnapshots",
+  "savedReports",
 ];
 const academicKinds = new Set([
   "grades",
@@ -151,6 +163,18 @@ export function createApplication({ databasePath, secureCookies = false }) {
       throw error;
     }
   }
+  if (!db.prepare("SELECT id FROM records WHERE id='product-v3'").get()) {
+    db.exec("BEGIN");
+    try {
+      seedProduct(put, all);
+      put("metadata", "system", { id: "product-v3", version: 3 });
+      db.exec("COMMIT");
+      migrated = true;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
   const qrKey = JSON.parse(
     db.prepare("SELECT body FROM records WHERE id='operations-v2'").get().body,
   ).qrKey;
@@ -222,6 +246,158 @@ export function createApplication({ databasePath, secureCookies = false }) {
     };
   }
   function scoped(user, kind, items) {
+    if (!canReadCollection(user, kind)) return [];
+    const config = all(user.school, "settings")[0] || {};
+    const module = {
+      character: "character",
+      tahfizh: "tahfizh",
+      admissions: "admissions",
+    }[kind];
+    if (
+      module &&
+      config.enabledModules &&
+      !config.enabledModules.includes(module)
+    )
+      return [];
+    if (
+      ["termSnapshots", "savedReports"].includes(kind) &&
+      !isPro(config) &&
+      user.role !== "foundation"
+    )
+      return [];
+    if (["foundationTasks", "unitNeeds", "schoolTargets"].includes(kind))
+      return user.role === "foundation"
+        ? schools.flatMap((s) => all(s.id, kind))
+        : items;
+    if (kind === "savedReports")
+      return items.filter(
+        (i) =>
+          i.owner === (user.role === "teacher" ? user.teacherId : user.role),
+      );
+    if (kind === "termSnapshots")
+      return user.role === "foundation"
+        ? schools.flatMap((s) => all(s.id, kind))
+        : items
+            .filter(
+              (i) =>
+                user.role !== "teacher" || user.classIds.includes(i.classId),
+            )
+            .map((i) => {
+              if (i.period !== "2026/2027 Ganjil") return i;
+              const pupils = all(user.school, "students").filter(
+                  (s) => s.classId === i.classId,
+                ),
+                ids = new Set(pupils.map((p) => p.id)),
+                grades = all(user.school, "grades").filter((g) =>
+                  ids.has(g.studentId),
+                );
+              return {
+                ...i,
+                students: pupils.length,
+                attendance: Math.round(
+                  pupils.reduce((a, p) => a + p.attendance, 0) /
+                    Math.max(pupils.length, 1),
+                ),
+                average: Math.round(
+                  grades.reduce((a, g) => a + g.score, 0) /
+                    Math.max(grades.length, 1),
+                ),
+                reportRate: Math.round(
+                  (all(user.school, "reports").filter(
+                    (r) => r.classId === i.classId && r.status === "Terbit",
+                  ).length /
+                    Math.max(pupils.length, 1)) *
+                    100,
+                ),
+                measuredAt: new Date().toISOString(),
+                source: "Agregasi kondisi data dummy saat ini",
+              };
+            });
+    if (kind === "gateIncidents") return items;
+    if (user.role === "security") {
+      const fields = {
+        students: ["id", "name", "nis", "classId", "photo", "status"],
+        classes: ["id", "name", "room"],
+        settings: ["id", "name", "year", "semester"],
+        pickupPersons: [
+          "id",
+          "studentId",
+          "name",
+          "relationship",
+          "status",
+          "validOn",
+        ],
+        pickupLogs: [
+          "id",
+          "studentId",
+          "action",
+          "personName",
+          "relationship",
+          "verified",
+          "source",
+          "note",
+          "date",
+          "time",
+          "recordedBy",
+        ],
+      };
+      return fields[kind]
+        ? items.map((i) =>
+            Object.fromEntries(
+              fields[kind]
+                .filter((k) => Object.hasOwn(i, k))
+                .map((k) => [k, i[k]]),
+            ),
+          )
+        : [];
+    }
+    if (kind === "settings" && user.role !== "principal") {
+      const base = [
+        "id",
+        "name",
+        "year",
+        "semester",
+        "curriculum",
+        "principal",
+        "footer",
+        "template",
+        "color",
+        "gradeScale",
+        "enabledModules",
+        "kkm",
+      ];
+      const keys =
+        user.role === "admin"
+          ? [
+              ...base,
+              "address",
+              "weightDaily",
+              "weightMidterm",
+              "weightFinal",
+              "plan",
+            ]
+          : user.role === "teacher"
+            ? [
+                ...base,
+                "weightDaily",
+                "weightMidterm",
+                "weightFinal",
+                "ewsAttendance",
+                "ewsDrop",
+                "ewsOverdue",
+                "plan",
+                "approvalMode",
+                "reportDue",
+                "followupDays",
+              ]
+            : base;
+      return items.map((i) =>
+        Object.fromEntries(
+          keys.filter((k) => Object.hasOwn(i, k)).map((k) => [k, i[k]]),
+        ),
+      );
+    }
+
     if (user.role === "foundation")
       return kind === "announcements"
         ? items.filter(
@@ -262,7 +438,16 @@ export function createApplication({ databasePath, secureCookies = false }) {
                 ([key]) => !["attendance", "history", "overdue"].includes(key),
               ),
             )
-          : s,
+          : teaching(user) && s.classId !== user.homeroomClassId
+            ? Object.fromEntries(
+                Object.entries(s).filter(
+                  ([key]) =>
+                    !["address", "phone", "parent", "birth", "email"].includes(
+                      key,
+                    ),
+                ),
+              )
+            : s,
       );
     if (
       [
@@ -287,7 +472,29 @@ export function createApplication({ databasePath, secureCookies = false }) {
       );
       return kind === "reports" && personal(user)
         ? filtered.filter((r) => r.status === "Terbit")
-        : filtered;
+        : kind === "interventions" && personal(user)
+          ? filtered.map(
+              ({
+                id,
+                studentId,
+                title,
+                status,
+                due,
+                expectedOutcome,
+                outcome,
+                evaluationDate,
+              }) => ({
+                id,
+                studentId,
+                title,
+                status,
+                due,
+                expectedOutcome,
+                outcome,
+                evaluationDate,
+              }),
+            )
+          : filtered;
     }
     if (
       ["classes", "assignments", "quizzes", "schedule", "materials"].includes(
@@ -299,7 +506,16 @@ export function createApplication({ databasePath, secureCookies = false }) {
           (i) => (i.classId || i.id) === students[0]?.classId,
         );
       if (teaching(user))
-        return items.filter(i=>user.classIds.includes(i.classId||i.id)&&(!['assignments','quizzes','materials'].includes(kind)||user.subjectIds.includes(i.subjectId||all(user.school,'subjects').find(s=>s.name===i.subject)?.id)));
+        return items.filter(
+          (i) =>
+            user.classIds.includes(i.classId || i.id) &&
+            (!["assignments", "quizzes", "materials"].includes(kind) ||
+              user.subjectIds.includes(
+                i.subjectId ||
+                  all(user.school, "subjects").find((s) => s.name === i.subject)
+                    ?.id,
+              )),
+        );
     }
     if (kind === "teachers") {
       if (personal(user)) return [];
@@ -433,46 +649,18 @@ export function createApplication({ databasePath, secureCookies = false }) {
         ...q,
         questions: q.questions.map(({ answer, ...question }) => question),
       }));
-    data.pickupPersons = data.pickupPersons.map((person) => ({
-      ...person,
-      qr: qrToken(user.school, person),
-    }));
+    if (["parent", "admin"].includes(user.role))
+      data.pickupPersons = data.pickupPersons.map((person) => ({
+        ...person,
+        qr: qrToken(user.school, person),
+      }));
     const school = {
       ...schools.find((s) => s.id === user.school),
       name:
         all(user.school, "settings")[0]?.name ||
         schools.find((s) => s.id === user.school).name,
     };
-    const overview =
-      user.role === "foundation"
-        ? schools.map((s) => {
-            const students = all(s.id, "students"),
-              grades = all(s.id, "grades"),
-              invoices = all(s.id, "invoices");
-            return {
-              ...s,
-              students: students.length,
-              teachers: all(s.id, "teachers").length,
-              attendance: Math.round(
-                students.reduce((a, b) => a + b.attendance, 0) /
-                  Math.max(students.length, 1),
-              ),
-              average: Math.round(
-                grades.reduce((a, b) => a + b.score, 0) /
-                  Math.max(grades.length, 1),
-              ),
-              reportsPublished: all(s.id, "reports").filter(
-                (r) => r.status === "Terbit",
-              ).length,
-              invoiceTotal: invoices.reduce((a, i) => a + i.amount, 0),
-              paidTotal: invoices.reduce(
-                (a, i) =>
-                  a + (i.paidAmount ?? (i.status === "Lunas" ? i.amount : 0)),
-                0,
-              ),
-            };
-          })
-        : [];
+    const overview = user.role === "foundation" ? product.board().units : [];
     res.json({
       user,
       schools,
@@ -485,6 +673,9 @@ export function createApplication({ databasePath, secureCookies = false }) {
         paymentGateway: false,
         ai: false,
         reportGeneration: "browser",
+        plan: all(user.school, "settings")[0]?.plan || "Pro",
+        pro: isPro(all(user.school, "settings")[0]),
+        generatedAt: new Date().toISOString(),
       },
     });
   });
@@ -515,9 +706,21 @@ export function createApplication({ databasePath, secureCookies = false }) {
       staffAttendance: ["admin", "teacher"],
       leaveRequests: ["teacher", "principal"],
       pickupPersons: ["admin", "parent"],
-      pickupLogs: ["admin"],
+      pickupLogs: ["security"],
     };
     if (!writers[kind]?.includes(role)) deny();
+    const optional = {
+        character: "character",
+        tahfizh: "tahfizh",
+        admissions: "admissions",
+      }[kind],
+      config = all(user.school, "settings")[0];
+    if (
+      optional &&
+      config.enabledModules &&
+      !config.enabledModules.includes(optional)
+    )
+      deny("Modul ini belum diaktifkan sekolah.");
     if (["messages", "integrations", "leads", "jobs"].includes(kind))
       deny("Fitur ini tidak tersedia pada versi ini.");
     if (
@@ -567,7 +770,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
     if (kind === "leaveRequests" && !["teacher", "principal"].includes(role))
       deny();
     if (kind === "pickupPersons" && !["admin", "parent"].includes(role)) deny();
-    if (kind === "pickupLogs" && role !== "admin") deny();
+    if (kind === "pickupLogs" && role !== "security") deny();
     if (!kinds.includes(kind)) deny();
     for (const record of [original, item]) {
       if (!record) continue;
@@ -617,6 +820,26 @@ export function createApplication({ databasePath, secureCookies = false }) {
     const original = stored && JSON.parse(stored.body);
     ensureWrite(user, kind, item, original);
     if (kind === "students") {
+      item = Object.fromEntries(
+        Object.entries(item).filter(([k]) =>
+          [
+            "id",
+            "name",
+            "nis",
+            "nisn",
+            "classId",
+            "gender",
+            "photo",
+            "birth",
+            "address",
+            "parent",
+            "phone",
+            "email",
+            "status",
+            "enrolled",
+          ].includes(k),
+        ),
+      );
       if (!item.name?.trim() || !/^\d{10}$/.test(item.nisn || ""))
         invalid("Nama dan NISN 10 digit wajib diisi.");
       if (
@@ -665,6 +888,37 @@ export function createApplication({ databasePath, secureCookies = false }) {
     )
       invalid("Nama atau judul wajib diisi.");
     if (kind === "settings") {
+      const allowed = [
+        "name",
+        "address",
+        "year",
+        "semester",
+        "curriculum",
+        "kkm",
+        "weightDaily",
+        "weightMidterm",
+        "weightFinal",
+        "template",
+        "color",
+        "principal",
+        "footer",
+        "gradeScale",
+        "enabledModules",
+      ];
+      item = {
+        ...original,
+        ...Object.fromEntries(
+          Object.entries(item).filter(([k]) => allowed.includes(k)),
+        ),
+      };
+      if (
+        item.enabledModules &&
+        (!Array.isArray(item.enabledModules) ||
+          item.enabledModules.some(
+            (k) => !["character", "tahfizh", "admissions"].includes(k),
+          ))
+      )
+        invalid("Modul sekolah tidak valid.");
       if (
         item.gradeScale &&
         !["100", "10", "4", "letter"].includes(item.gradeScale)
@@ -678,13 +932,6 @@ export function createApplication({ databasePath, secureCookies = false }) {
       )
         invalid("Total bobot nilai harus 100%.");
       if (item.kkm < 0 || item.kkm > 100) invalid("KKM harus bernilai 0–100.");
-      item = {
-        ...original,
-        ...item,
-        ewsAttendance: original?.ewsAttendance || 80,
-        ewsDrop: original?.ewsDrop || 10,
-        ewsOverdue: original?.ewsOverdue || 3,
-      };
     }
     if (kind === "grades") {
       if (!Number.isFinite(item.score) || item.score < 0 || item.score > 100)
@@ -717,9 +964,66 @@ export function createApplication({ databasePath, secureCookies = false }) {
         !["Direncanakan", "Berjalan", "Selesai"].includes(item.status))
     )
       invalid("Rencana, penanggung jawab, tanggal, dan status wajib diisi.");
+    if (kind === "interventions") {
+      const student = getStudent(user, item.studentId),
+        grades = all(user.school, "grades").filter(
+          (g) => g.studentId === student.id,
+        ),
+        score = Math.round(
+          grades.reduce((a, g) => a + g.score, 0) / Math.max(grades.length, 1),
+        );
+      item = {
+        ...item,
+        baselineAttendance: original?.baselineAttendance ?? student.attendance,
+        baselineScore: original?.baselineScore ?? score,
+        baselineOverdue: original?.baselineOverdue ?? student.overdue,
+        evaluationDate: item.evaluationDate || item.due,
+        expectedOutcome:
+          item.expectedOutcome || "Kehadiran dan penyelesaian tugas membaik.",
+        created: original?.created || new Date().toISOString(),
+      };
+      if (item.status === "Selesai") {
+        if (
+          !["Membaik", "Perlu lanjutan", "Belum berubah"].includes(
+            item.outcome,
+          ) ||
+          !item.evaluationNote?.trim()
+        )
+          invalid(
+            "Pilih hasil evaluasi dan isi catatan sebelum menutup pendampingan.",
+          );
+        item = {
+          ...item,
+          evaluatedAt: new Date().toISOString(),
+          afterAttendance: student.attendance,
+          afterScore: score,
+          afterOverdue: student.overdue,
+        };
+      }
+    }
     if (kind === "reports") {
       const student = getStudent(user, item.studentId);
       item.classId = student.classId;
+      const config = all(user.school, "settings")[0];
+      if (!["Draf", "Review", "Terbit"].includes(item.status))
+        invalid("Status rapor tidak valid.");
+      if (isPro(config) && config.approvalMode === "two-step") {
+        if (user.role === "teacher" && item.status === "Terbit")
+          deny("Penerbitan tahap akhir menjadi tugas kepala sekolah.");
+        item.homeroomReviewed = original?.homeroomReviewed || false;
+        item.reviewedBy = original?.reviewedBy || null;
+        if (user.role === "teacher" && item.status === "Review") {
+          item.homeroomReviewed = true;
+          item.reviewedBy = user.name;
+          item.reviewedAt = new Date().toISOString();
+        }
+        if (
+          item.status === "Terbit" &&
+          original?.status !== "Terbit" &&
+          !item.homeroomReviewed
+        )
+          invalid("Validasi wali kelas harus selesai terlebih dahulu.");
+      }
       if (!canReviewReport(user, student.classId)) deny();
       if (
         item.status === "Terbit" &&
@@ -921,35 +1225,51 @@ export function createApplication({ databasePath, secureCookies = false }) {
       item.status = item.status || "Aktif";
     }
     if (kind === "pickupLogs") {
-      if (original) deny("Catatan antar-jemput tidak dapat ditimpa.");
+      if (original) deny("Catatan gerbang tidak dapat ditimpa.");
       if (!["Antar", "Jemput"].includes(item.action))
         invalid("Pilih Antar atau Jemput.");
-      let person;
+      let person, permit;
       if (item.qr) {
         const verified = verifyQR(user, item.qr);
         if (verified.student.id !== item.studentId)
           invalid("QR bukan untuk siswa yang dipilih.");
         person = verified.person;
       } else {
-        person = all(user.school, "pickupPersons").find(
-          (p) =>
-            p.id === item.personId &&
-            p.studentId === item.studentId &&
-            p.status !== "Nonaktif" &&
-            (!p.validOn || p.validOn === today()),
+        permit = all(user.school, "gateIncidents").find(
+          (i) =>
+            i.id === item.incidentId &&
+            i.studentId === item.studentId &&
+            i.status === "Izinkan sekali" &&
+            !i.used &&
+            i.date === today(),
         );
-        if (!person && !item.note?.trim())
-          invalid("Catatan wajib untuk penjemput yang tidak terdaftar.");
+        if (!permit)
+          deny("Pengecualian memerlukan izin Admin yang berlaku hari ini.");
+        person = {
+          id: null,
+          name: permit.personName,
+          relationship: permit.relationship,
+        };
       }
+      const logs = all(user.school, "pickupLogs").filter(
+          (l) => l.studentId === item.studentId && l.date === today(),
+        ),
+        last = logs.at(-1);
+      if (item.action === "Antar" && last?.action === "Antar")
+        invalid("Siswa sudah tercatat masuk dan belum tercatat pulang.");
+      if (item.action === "Jemput" && last?.action !== "Antar" && !permit)
+        invalid(
+          "Kedatangan siswa belum tercatat atau siswa sudah pulang. Minta konfirmasi Admin.",
+        );
       item = {
         id: item.id,
         studentId: item.studentId,
         action: item.action,
-        personId: person?.id || null,
-        personName: person?.name || item.personName || "Tidak terdaftar",
-        relationship: person?.relationship || "Lainnya",
-        verified: !!person,
-        source: item.qr ? "QR" : "Manual",
+        personId: person.id,
+        personName: person.name,
+        relationship: person.relationship,
+        verified: !permit,
+        source: permit ? "Izin Admin" : "QR",
         note: item.note || "",
         date: today(),
         time: new Date().toLocaleTimeString("id-ID", {
@@ -958,7 +1278,14 @@ export function createApplication({ databasePath, secureCookies = false }) {
           minute: "2-digit",
         }),
         recordedBy: user.name,
+        incidentId: permit?.id || null,
       };
+      if (permit)
+        put("gateIncidents", user.school, {
+          ...permit,
+          used: true,
+          usedAt: new Date().toISOString(),
+        });
     }
     put(kind, user.school, item);
     if (["attendance", "grades", "submissions"].includes(kind)) {
@@ -992,6 +1319,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
           next.overdue = all(user.school, "assignments").filter(
             (a) =>
               a.classId === student.classId &&
+              a.due < today() &&
               !submissions.some((s) => s.assignmentId === a.id),
           ).length;
         }
@@ -1016,6 +1344,20 @@ export function createApplication({ databasePath, secureCookies = false }) {
       throw error;
     }
   };
+  const product = installProductAPI({
+    app,
+    all,
+    put,
+    db,
+    schools,
+    deny,
+    invalid,
+    transactional,
+    saveRecord,
+    audit,
+    today,
+    validDate,
+  });
   app.post("/api/academic-batch", (req, res) => {
     const { kind, rows } = req.body;
     if (
@@ -1033,6 +1375,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
   });
   app.post("/api/ews-rules", (req, res) => {
     if (req.user.role !== "principal") deny();
+    product.requirePro(req.user);
     const settings = all(req.user.school, "settings")[0],
       item = { ...settings };
     for (const key of ["ewsAttendance", "ewsDrop", "ewsOverdue"]) {
@@ -1049,51 +1392,98 @@ export function createApplication({ databasePath, secureCookies = false }) {
     audit(req.user, "Memperbarui aturan peringatan akademik");
     res.json(item);
   });
+  app.get("/api/demo-gate-card", (req, res) => {
+    if (req.user.role !== "security") deny();
+    const person = all(req.user.school, "pickupPersons").find(
+      (p) =>
+        p.id === `${req.user.school}-guardian-0-0` &&
+        p.status === "Aktif" &&
+        !p.validOn,
+    );
+    if (!person) invalid("Kartu dummy tidak tersedia.");
+    res.json({ qr: qrToken(req.user.school, person), demo: true });
+  });
   app.post("/api/pickup/verify", (req, res) => {
-    if (!["admin", "principal"].includes(req.user.role)) deny();
-    res.json(verifyQR(req.user, req.body.qr));
+    if (req.user.role !== "security") deny();
+    const result = verifyQR(req.user, req.body.qr);
+    res.json({
+      person: Object.fromEntries(
+        ["id", "name", "relationship", "validOn", "status"].map((k) => [
+          k,
+          result.person[k],
+        ]),
+      ),
+      student: Object.fromEntries(
+        ["id", "name", "classId", "photo", "nis"].map((k) => [
+          k,
+          result.student[k],
+        ]),
+      ),
+      temporary: result.temporary,
+      verifiedAt: new Date().toISOString(),
+    });
+  });
+  app.get("/api/academic-backup", (req, res) => {
+    if (req.user.role !== "principal") deny();
+    audit(req.user, "Mengekspor cadangan akademik sekolah");
+    const kindsToExport = [
+      "students",
+      "classes",
+      "subjects",
+      "grades",
+      "attendance",
+      "assignments",
+      "submissions",
+      "quizzes",
+      "reports",
+      "interventions",
+      "character",
+      "tahfizh",
+      "materials",
+    ];
+    res.json({
+      format: "KabarKelas-Akademik-1",
+      school: req.user.school,
+      date: new Date().toISOString(),
+      data: Object.fromEntries(
+        kindsToExport.map((kind) => [
+          kind,
+          scoped(req.user, kind, all(req.user.school, kind)),
+        ]),
+      ),
+    });
   });
   app.get("/api/backup", (req, res) => {
     if (req.user.role !== "admin") deny();
     audit(req.user, "Mengekspor cadangan data sekolah");
     res.json({
-      format: "KabarKelas-2",
+      format: "KabarKelas-3",
       school: req.user.school,
       date: new Date().toISOString(),
       data: Object.fromEntries(
-        kinds.map((kind) => [kind, all(req.user.school, kind)]),
+        administrativeBackupKinds.map((kind) => [
+          kind,
+          scoped(req.user, kind, all(req.user.school, kind)),
+        ]),
       ),
     });
   });
   app.post("/api/restore", (req, res) => {
     const user = req.user,
-      body = req.body;
+      b = req.body;
     if (user.role !== "admin") deny();
     if (
-      !["KabarKelas-1", "KabarKelas-2"].includes(body.format) ||
-      body.school !== user.school ||
-      !body.data ||
-      !kinds
-        .filter(
-          (k) =>
-            ![
-              "payments",
-              "staffAttendance",
-              "leaveRequests",
-              "uniforms",
-              "uniformOverrides",
-              "character",
-              "tahfizh",
-              "pickupPersons",
-              "pickupLogs",
-            ].includes(k),
-        )
-        .every((k) => Array.isArray(body.data[k]))
+      !["KabarKelas-1", "KabarKelas-2", "KabarKelas-3"].includes(b.format) ||
+      b.school !== user.school ||
+      !b.data ||
+      !["students", "teachers", "classes", "subjects", "settings"].every((k) =>
+        Array.isArray(b.data[k]),
+      )
     )
-      invalid("Cadangan tidak valid atau berasal dari sekolah lain.");
+      invalid("Cadangan administrasi tidak valid atau berbeda sekolah.");
     const seen = new Set();
-    for (const kind of kinds)
-      for (const row of body.data[kind] || []) {
+    for (const kind of administrativeBackupKinds)
+      for (const row of b.data[kind] || []) {
         const old =
           row.id &&
           db.prepare("SELECT school,kind FROM records WHERE id=?").get(row.id);
@@ -1107,16 +1497,38 @@ export function createApplication({ databasePath, secureCookies = false }) {
         seen.add(row.id);
       }
     transactional(() => {
-      for (const kind of kinds) {
-        if (!Array.isArray(body.data[kind])) continue;
-        db.prepare("DELETE FROM records WHERE school=? AND kind=?").run(
-          user.school,
-          kind,
-        );
-        for (const row of body.data[kind]) put(kind, user.school, row);
+      for (const kind of administrativeBackupKinds) {
+        if (
+          [
+            "pickupLogs",
+            "gateIncidents",
+            "leaveRequests",
+            "audit",
+            "payments",
+          ].includes(kind) ||
+          !Array.isArray(b.data[kind])
+        )
+          continue;
+        for (const row of b.data[kind]) {
+          if (kind === "students") {
+            const old = all(user.school, "students").find(
+              (s) => s.id === row.id,
+            );
+            const { attendance, history, overdue, ...identity } = row;
+            put(kind, user.school, {
+              attendance: 100,
+              history: [80, 80, 80, 80],
+              overdue: 0,
+              ...old,
+              ...identity,
+            });
+          } else if (kind === "settings") {
+            saveRecord(user, kind, row, { log: false });
+          } else put(kind, user.school, row);
+        }
       }
     });
-    audit(user, "Memulihkan cadangan data sekolah");
+    audit(user, "Memulihkan data administrasi tanpa mengubah data akademik");
     res.json({ ok: true });
   });
   app.get("/api/imports", (req, res) => {
@@ -1239,11 +1651,15 @@ export function createApplication({ databasePath, secureCookies = false }) {
     audit(user, `Menyelesaikan kuis ${quiz.title}`);
     res.json(result);
   });
-  app.post("/api/:kind", (req, res) =>
-    res.json(
-      transactional(() => saveRecord(req.user, req.params.kind, req.body)),
-    ),
-  );
+  app.post("/api/:kind", (req, res) => {
+    const item = transactional(() =>
+      saveRecord(req.user, req.params.kind, req.body),
+    );
+    const visible = scoped(req.user, req.params.kind, [item]).find(
+      (row) => row.id === item.id,
+    );
+    res.json(visible || { id: item.id, ok: true });
+  });
   app.delete("/api/:kind/:id", (req, res) => {
     const user = req.user,
       { kind, id } = req.params;

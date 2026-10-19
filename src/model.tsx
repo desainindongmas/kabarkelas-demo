@@ -34,6 +34,9 @@ export const AppContext = createContext<AppState>(null!);
 export const useApp = () => useContext(AppContext);
 export {
   roleNames,
+  roleResponsibilities,
+  isPro,
+  canPublishReport,
   canAccessPage,
   canManageSchool,
   canReviewReport,
@@ -48,6 +51,7 @@ export const rolePhotos: Record<string, number> = {
   parent: 9,
   student: 1,
   foundation: 8,
+  security: 7,
 };
 export const currency = (n: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -117,3 +121,30 @@ export function gradeDisplay(score: number, settings: Partial<Row> = {}) {
       return number(score);
   }
 }
+
+export const todayWIB = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+export const liveDate = () =>
+  new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+export const greeting = () => {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Jakarta",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+  return hour < 11
+    ? "Selamat pagi"
+    : hour < 15
+      ? "Selamat siang"
+      : hour < 18
+        ? "Selamat sore"
+        : "Selamat malam";
+};

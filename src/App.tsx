@@ -1,3 +1,6 @@
+import { Board, UnitWork, Packages, ProAnalysis, Workflow } from "./Product";
+import { GateDashboard, GateScan, GateHistory, GateIncidents } from "./Gate";
+import { DemoWelcome, DemoTour } from "./Experience";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -30,6 +33,7 @@ import {
 import {
   AppContext,
   roleNames,
+  roleResponsibilities,
   rolePhotos,
   canAccessPage,
   displayRole,
@@ -59,7 +63,6 @@ import {
   Finance,
   Announcements,
   Settings,
-  Foundation,
   Admissions,
   AdminDashboard,
 } from "./Admin";
@@ -101,6 +104,19 @@ export async function api(url: string, body?: unknown, method = "POST") {
     error.status = response.status;
     throw error;
   }
+  if (body !== undefined)
+    window.dispatchEvent(
+      new CustomEvent("kk:action", {
+        detail: {
+          path:
+            url +
+            (url === "/api/academic-batch"
+              ? "#" + (body as { kind: string }).kind
+              : ""),
+          method,
+        },
+      }),
+    );
   return result;
 }
 const navigation = [
@@ -138,7 +154,10 @@ const navigation = [
       },
       { id: "staff-recap", label: "Rekap absensi", icon: ClipboardCheck },
       { id: "uniform", label: "Jadwal seragam", icon: Shirt },
-      { id: "pickup", label: "Antar jemput", icon: DoorOpen },
+      { id: "pickup", label: "Penjemput terdaftar", icon: DoorOpen },
+      { id: "gate-scan", label: "Pindai QR gerbang", icon: ShieldCheck },
+      { id: "gate-history", label: "Riwayat gerbang", icon: ClipboardCheck },
+      { id: "gate-incidents", label: "Konfirmasi gerbang", icon: ShieldCheck },
       { id: "announcements", label: "Pengumuman", icon: Bell },
     ],
   },
@@ -151,6 +170,17 @@ const navigation = [
       { id: "foundation", label: "Perbandingan sekolah", icon: Network },
       { id: "trust", label: "Keamanan & data", icon: ShieldCheck },
       { id: "settings", label: "Pengaturan", icon: Settings2 },
+      { id: "analytics", label: "Analisis & laporan", icon: Activity },
+      { id: "workflow", label: "Alur & tenggat", icon: ClipboardCheck },
+      { id: "unit-work", label: "Koordinasi yayasan", icon: Network },
+      {
+        id: "board-actions",
+        label: "Tindak lanjut unit",
+        icon: ClipboardCheck,
+      },
+      { id: "unit-needs", label: "Kebutuhan unit", icon: Wallet },
+      { id: "meeting", label: "Laporan rapat", icon: FileCheck2 },
+      { id: "packages", label: "Paket & manfaat", icon: Building2 },
     ],
   },
 ];
@@ -163,7 +193,8 @@ const descriptions: Record<string, string> = {
   teacher: "Kelola pembelajaran di kelas yang diajar",
   parent: "Ikuti perkembangan anak yang terhubung",
   student: "Pantau tugas dan perjalanan belajarmu",
-  foundation: "Ringkasan lintas unit pendidikan",
+  foundation: "Keputusan dan tindak lanjut lintas unit",
+  security: "Verifikasi QR, catatan gerbang dan laporan kejadian",
 };
 function parseRoute() {
   const [page = "dashboard", id = ""] = (
@@ -180,6 +211,9 @@ export default function App() {
       overview: Row[];
     } | null>(null),
     [route, setRoute] = useState(parseRoute),
+    [welcome, setWelcome] = useState(
+      () => localStorage.getItem("kk-welcome-v3") !== "seen",
+    ),
     [error, setError] = useState(""),
     [collapsed, setCollapsed] = useState(false),
     [mobile, setMobile] = useState(false),
@@ -250,6 +284,9 @@ export default function App() {
   const go = (page: string, id = "") => {
     location.hash = `/${page}${id ? "/" + id : ""}`;
     setMobile(false);
+    window.dispatchEvent(
+      new CustomEvent("kk:action", { detail: { path: "route:" + page } }),
+    );
   };
   const setRole = async (role: string, school?: string, isHomeroom = false) => {
     setSwitching(true);
@@ -304,18 +341,24 @@ export default function App() {
     .map((g) => ({
       ...g,
       items: g.items
-        .filter((i) => canAccessPage(user, i.id))
+        .filter((i) => canAccessPage(user, i.id, data.settings[0]))
         .map((i) => ({
           ...i,
           label:
             i.id === "students" && user.role === "admin"
               ? "Data siswa"
-              : i.label,
+              : i.id === "schedule" && user.role === "admin"
+                ? "Jadwal pelajaran"
+                : i.id === "assignments" && user.role === "parent"
+                  ? "Tugas anak"
+                  : i.id === "finance" && user.role === "parent"
+                    ? "Tagihan & kuitansi"
+                    : i.label,
         })),
     }))
     .filter((g) => g.items.length);
   const content = () => {
-    if (!canAccessPage(user, route.page))
+    if (!canAccessPage(user, route.page, data.settings[0]))
       return (
         <Empty
           title="Halaman tidak tersedia untuk peran ini"
@@ -332,7 +375,9 @@ export default function App() {
         return isPersonal ? (
           <PersonalDashboard />
         ) : user.role === "foundation" ? (
-          <Foundation />
+          <Board />
+        ) : user.role === "security" ? (
+          <GateDashboard />
         ) : user.role === "admin" ? (
           <AdminDashboard />
         ) : (
@@ -369,7 +414,27 @@ export default function App() {
       case "settings":
         return <Settings />;
       case "foundation":
-        return <Foundation />;
+        return <Board view="comparison" />;
+      case "board-actions":
+        return <Board view="actions" />;
+      case "unit-needs":
+        return <Board view="needs" />;
+      case "meeting":
+        return <Board view="meeting" />;
+      case "unit-work":
+        return <UnitWork />;
+      case "packages":
+        return <Packages />;
+      case "analytics":
+        return <ProAnalysis />;
+      case "workflow":
+        return <Workflow />;
+      case "gate-scan":
+        return <GateScan />;
+      case "gate-history":
+        return <GateHistory />;
+      case "gate-incidents":
+        return <GateIncidents />;
       case "admissions":
         return <Admissions />;
       case "staff-self":
@@ -400,11 +465,12 @@ export default function App() {
     teacher: ["dashboard", "attendance", "grades", "staff-self"],
     parent: ["dashboard", "grades", "assignments", "reports"],
     student: ["dashboard", "assignments", "quizzes", "grades"],
-    foundation: ["dashboard", "foundation", "announcements", "trust"],
+    foundation: ["dashboard", "board-actions", "unit-needs", "meeting"],
+    security: ["dashboard", "gate-scan", "gate-history", "gate-incidents"],
   };
   const mobileItems = mobileIds[user.role]
     .map((id) => navigation.flatMap((g) => g.items).find((i) => i.id === id)!)
-    .filter(Boolean);
+    .filter((i) => i && canAccessPage(user, i.id, data.settings[0]));
   return (
     <AppContext.Provider
       value={{
@@ -513,6 +579,12 @@ export default function App() {
             </div>
             <div className="top-actions">
               <button
+                className="tour-start"
+                onClick={() => window.dispatchEvent(new Event("kk:tour"))}
+              >
+                Skenario demo
+              </button>
+              <button
                 className="global-search"
                 onClick={() => setSearchOpen(true)}
               >
@@ -526,13 +598,15 @@ export default function App() {
                 {data.settings[0]?.year || "2026/2027"} <span>•</span>
                 {data.settings[0]?.semester || "Ganjil"}
               </span>
-              <button
-                className="notification-btn icon-btn"
-                aria-label="Buka notifikasi"
-                onClick={() => setNotifications(true)}
-              >
-                <Bell size={20} />
-              </button>
+              {canAccessPage(user, "announcements") && (
+                <button
+                  className="notification-btn icon-btn"
+                  aria-label="Buka notifikasi"
+                  onClick={() => setNotifications(true)}
+                >
+                  <Bell size={20} />
+                </button>
+              )}
               <button
                 className="role-switch"
                 onClick={() => setRoleModal(true)}
@@ -576,6 +650,21 @@ export default function App() {
             Lainnya
           </button>
         </nav>
+        <DemoTour />
+        {welcome && (
+          <DemoWelcome
+            onSkip={() => {
+              localStorage.setItem("kk-welcome-v3", "seen");
+              setWelcome(false);
+            }}
+            onChoose={async (role, h) => {
+              await setRole(role, undefined, h);
+              localStorage.setItem("kk-welcome-v3", "seen");
+              setWelcome(false);
+              setTimeout(() => window.dispatchEvent(new Event("kk:tour")), 50);
+            }}
+          />
+        )}
         {roleModal && (
           <Modal
             title="Jelajahi KabarKelas sesuai peranmu"
@@ -690,6 +779,7 @@ export default function App() {
             </div>
             <div className="search-results">
               {search &&
+                (canAccessPage(user, "students") || isPersonal) &&
                 data.students
                   .filter(
                     (s) =>
@@ -791,43 +881,37 @@ export default function App() {
         )}
         {help && (
           <Modal
-            title="Satu ruang untuk kegiatan sekolah"
+            title="Panduan sesuai peranmu"
             subtitle="Demo KabarKelas dengan pembagian akses sesuai peran."
             onClose={() => setHelp(false)}
           >
             <div className="help-content">
               <Brand />
-              <p>
-                Gunakan menu yang tersedia untuk menjalankan pekerjaan sesuai
-                peran. Guru yang juga menjadi wali kelas memiliki akses tambahan
-                untuk kelas perwaliannya.
-              </p>
-              <ol>
-                <li>
-                  <strong>Akademik.</strong> Kelola nilai, absensi, tugas,
-                  rapor, serta pendampingan siswa.
-                </li>
-                <li>
-                  <strong>Administrasi.</strong> Admin mengelola data, seragam,
-                  absensi guru, dan pencatatan SPP manual.
-                </li>
-                <li>
-                  <strong>Keluarga.</strong> Wali murid memantau anak, tagihan,
-                  dan penjemput yang terdaftar.
-                </li>
-              </ol>
+              <h3>{displayRole(user)}</h3>
+              <p>{roleResponsibilities[user.role]}</p>
               <div className="callout blue">
-                Semua identitas adalah data demo. Pengingat tampil di aplikasi.
-                PDF dan ZIP dibuat di perangkatmu; tunggu hingga selesai sebelum
-                menutup tab.
+                Identitas dan skenario menggunakan data dummy. Hak akses
+                dibatasi pada menu dan API. Pengingat tersedia di aplikasi;
+                tidak ada pesan keluar. Pemilihan role terbuka khusus untuk
+                demo.
               </div>
               <Button
+                onClick={() => {
+                  setHelp(false);
+                  window.dispatchEvent(new Event("kk:tour"));
+                }}
+              >
+                Mulai skenario peranku
+                <ArrowRight size={16} />
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setHelp(false);
                   setRoleModal(true);
                 }}
               >
-                Jelajahi peran <ArrowRight size={16} />
+                Jelajahi role lain
               </Button>
             </div>
           </Modal>

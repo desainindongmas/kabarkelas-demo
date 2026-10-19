@@ -1,3 +1,4 @@
+import { TodayWork } from "./Product";
 import { SchoolReminders } from "./Operations";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -29,7 +30,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { avg, currency, date, risk, useApp } from "./model";
+import { avg, currency, date, risk, useApp, greeting, liveDate } from "./model";
 import {
   Avatar,
   Badge,
@@ -62,7 +63,7 @@ export function PersonalDashboard() {
         }
         title={
           parent
-            ? "Selamat pagi, Ibu Dian ☀"
+            ? `${greeting()}, Ibu Dian`
             : `Halo, ${s.name.split(" ")[0]}! ☀`
         }
         description={
@@ -73,7 +74,7 @@ export function PersonalDashboard() {
         action={
           <div className="date-chip">
             <CalendarDays size={16} />
-            Sabtu, 17 Oktober 2026
+            {liveDate()}
           </div>
         }
       />
@@ -123,6 +124,7 @@ export function PersonalDashboard() {
           </Button>
         </div>
       </div>
+      <TodayWork />
       <SchoolReminders />
       <div className="metrics four">
         <Metric

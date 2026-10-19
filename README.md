@@ -16,7 +16,7 @@ Server React/Vite dan API berjalan bersama di port 3000. Produksi lokal: `npm ru
 
 ## Peran dan akses
 
-Enam role utama tersedia melalui **Ganti peran**. Wali kelas adalah kemampuan tambahan Guru, bukan role tersendiri.
+Tujuh role utama tersedia melalui **Ganti peran**. Wali kelas adalah kemampuan tambahan Guru, bukan role tersendiri.
 
 | Peran | Cakupan |
 |---|---|
@@ -26,9 +26,10 @@ Enam role utama tersedia melalui **Ganti peran**. Wali kelas adalah kemampuan ta
 | Guru + wali kelas | Tambahan intervensi, P5, tahfizh, catatan dan persetujuan rapor untuk kelas perwaliannya saja |
 | Wali Murid | Data anak terhubung, perkembangan akademik, rapor terbit, tagihan/kuitansi, seragam, dan pengelolaan penjemput |
 | Siswa | Data sendiri, tugas, pengumpulan, kuis, rapor terbit, jadwal, materi dan perkembangan |
-| Yayasan | Statistik agregat dan perbandingan tiga sekolah; tanpa biodata atau rincian akademik/keuangan individu |
+| Yayasan | Prioritas/target unit, perbandingan persentase dan tren, arahan/PIC/tenggat, progres/bukti, keputusan kebutuhan dan laporan rapat; tanpa identitas siswa |
+| Security | Kamera/unggah/kode QR, catatan masuk/pulang, riwayat dan laporan kejadian; tanpa nilai, SPP atau data keluarga yang tidak diperlukan |
 
-Menu, tombol, pencarian, halaman langsung, dan API memeriksa hak akses. Role demo tetap dapat dipilih bebas; ini bukan login produksi. Admin tidak menerima nilai/absensi siswa dalam bootstrap, tetapi backup sekolah tetap merupakan kewenangan administrasi khusus yang berisi data lengkap.
+Menu, tombol, pencarian, halaman langsung, dan API memeriksa hak akses. Role demo tetap dapat dipilih bebas; ini bukan login produksi. Admin tidak menerima nilai/absensi siswa dalam bootstrap, tetapi backup administrasi hanya berisi data sesuai kewenangan Admin. Kepala Sekolah memiliki cadangan akademik terpisah. Pembagian rinci dan alur pengecualian gerbang ada di [ROLE_ACCESS.md](ROLE_ACCESS.md).
 
 ## Fitur dan data
 
@@ -41,10 +42,26 @@ Menu, tombol, pencarian, halaman langsung, dan API memeriksa hak akses. Role dem
 - SPP hanya pencatatan manual oleh Admin: tagihan, pembayaran sebagian/lunas melalui tunai atau transfer manual, riwayat dan kuitansi PDF. Wali Murid hanya membaca tagihan/riwayat.
 - Presensi mandiri guru, catatan Admin, pengajuan izin dan keputusan Kepala Sekolah. Rekap guru/siswa sesuai izin, ekspor Excel/PDF.
 - Seragam mingguan dan pengecualian tanggal; capaian enam dimensi P5 dan tahfizh/akhlak oleh wali kelas.
-- Penjemput tetap/pengganti bertanggal, kartu QR bertanda HMAC, verifikasi server, pencatatan antar/jemput oleh Admin, serta riwayat untuk wali dan kepala sekolah. QR dapat dibaca dengan pemindai perangkat dan kodenya ditempel di verifikator. Identitas fisik tetap perlu dicocokkan petugas.
+- Penjemput tetap/pengganti bertanggal, kartu QR bertanda HMAC, verifikasi server, pencatatan antar/jemput oleh Security, serta riwayat untuk wali dan kepala sekolah. QR dapat dipindai memakai kamera (HTTPS dan izin kamera), dibaca dari unggahan gambar, atau ditempel sebagai kode kartu. Identitas fisik tetap perlu dicocokkan petugas.
 - Pengumuman dalam aplikasi dengan audience/status; tanpa chat, payment gateway, panggilan AI, email atau integrasi WhatsApp.
 
 Fitur operasional diperluas dengan membaca repository referensi pengguna `desainindongmas/demo-kabarkelas` pada commit `e7ff45e`. Matriks peran dan pengecualian integrasi mengikuti permintaan terbaru pengguna. Dokumen blueprint/roadmap dipakai sebagai spesifikasi produk, bukan instruksi untuk mengirim pesan, menjalankan layanan berbayar, atau menerbitkan kredensial.
+
+## Pengalaman demo, Standard, Pro, dan Yayasan
+
+Pengunjung baru memilih peran dan dapat menjalankan skenario singkat dengan progres yang mengikuti penyimpanan dan unduhan yang benar-benar berhasil. Panduan dapat ditutup atau dibuka kembali dari Skenario demo/Pusat bantuan. Dashboard menampilkan pekerjaan yang menunggu sesuai role, dengan tanggal dan sapaan WIB.
+
+Standard menyediakan pekerjaan harian satu sekolah: rapor PDF/ZIP, EWS dasar dan pendampingan, tagihan serta penerimaan massal, SPP cicilan, kuitansi, perpindahan calon siswa diterima menjadi siswa aktif, pemeriksaan kelengkapan rapor, ekspor dan backup dasar. Nilai yang belum lengkap dapat diarahkan ke kelas/mapel pengampu. Guru yang ditugaskan dapat mengisi nilai siswa baru.
+
+Pro menambahkan analisis lintas semester, tampilan laporan tersimpan, aturan EWS yang dapat disesuaikan, pilihan persetujuan rapor satu atau dua tahap, tenggat dan horizon pengingat dalam aplikasi. Dalam dua tahap, wali kelas memvalidasi, lalu Kepala Sekolah menerbitkan. Paket demo dapat diganti oleh Kepala Sekolah/Admin melalui Paket & manfaat; izin role tetap berlaku pada semua paket. Tidak ada transaksi atau langganan nyata.
+
+Halaman paket menggunakan **harga ilustrasi demo**: Standard Rp149.000/sekolah/bulan, Pro Rp199.000/sekolah/bulan, dan Yayasan Rp499.000/3 unit/bulan. Angka ini bukan penawaran resmi. Kuota siswa, penyimpanan, biaya layanan dan pendampingan perlu ditetapkan sebelum penjualan. Tidak ada klaim penghematan waktu yang belum diukur.
+
+Yayasan mendapat prioritas unit dan target, perbandingan persentase/tren, kelengkapan dan waktu pembaruan data, arahan dengan PIC/tenggat, progres serta bukti dari Kepala Sekolah, pengajuan/persetujuan kebutuhan dan pemenuhannya, serta bahan rapat PDF. Tingkat penerimaan SPP memakai tagihan yang sudah jatuh tempo. Rata-rata nilai mentah lintas sekolah tidak diperingkat. Data dummy tiga unit memperagakan keterlambatan rapor, penurunan kehadiran, dan peningkatan hasil.
+
+Pendampingan memiliki target, PIC, tanggal evaluasi, snapshot indikator awal, hasil dan catatan evaluasi, serta snapshot saat penutupan. Penutupan wajib menyertakan hasil evaluasi. Snapshot menunjukkan kondisi yang tercatat; tidak membuktikan hubungan sebab-akibat.
+
+Migrasi `product-v3` menambahkan skenario dan alur baru pada ruang demo yang sudah ada. Biodata, nilai, dan pembayaran yang pernah diubah tidak direset. Riwayat semester lama merupakan skenario dummy; semester berjalan dihitung dari data saat dibuka. P5, tahfizh dan PPDB dapat diaktifkan sesuai jenis sekolah.
 
 ## Deploy Netlify melalui Git
 
@@ -61,6 +78,6 @@ npm run build
 npm test
 ```
 
-Tes memakai database sementara, server produksi port 3197 dan Chromium (`/usr/bin/chromium`, dapat diganti melalui `CHROMIUM_PATH`). Cakupan mencakup isolasi sekolah/pengunjung, izin role, batch atomik, SPP manual, rapor, impor/backup, izin guru, QR, layar desktop/mobile, ZIP PDF browser, serta entry point Netlify dengan emulator Blobs resmi. `test-results/` berisi tangkapan layar lokal dan diabaikan Git.
+Tes memakai database sementara, server produksi port 3197 dan Chromium (`/usr/bin/chromium`, dapat diganti melalui `CHROMIUM_PATH`). Cakupan mencakup isolasi sekolah/pengunjung, izin role, batch atomik, SPP manual, rapor, impor/backup, izin guru, QR (termasuk unggah gambar), tujuh role dan minimisasi kolom data, alur Yayasan, paket, layar desktop/mobile, ZIP PDF browser, serta entry point Netlify dengan emulator Blobs resmi. `test-results/` berisi tangkapan layar lokal dan diabaikan Git.
 
 Ini demo dengan identitas fiktif dan 12 foto sintetis yang dipakai ulang. Autentikasi pengguna nyata, otorisasi keanggotaan sekolah permanen, peninjauan keamanan, dan kebijakan retensi perlu disiapkan sebelum memakai data sekolah nyata. Kuis bukan sistem pengawasan ujian. Pengingat hanya tampil saat aplikasi dibuka; tidak ada pesan atau notifikasi keluar.

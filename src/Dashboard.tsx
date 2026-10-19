@@ -1,3 +1,4 @@
+import { TodayWork } from "./Product";
 import { SchoolReminders } from "./Operations";
 import {
   Activity,
@@ -30,7 +31,16 @@ import {
   BarChart,
   Cell,
 } from "recharts";
-import { avg, number, risk, useApp, canEdit, canIntervene } from "./model";
+import {
+  avg,
+  number,
+  risk,
+  useApp,
+  canEdit,
+  canIntervene,
+  liveDate,
+  greeting,
+} from "./model";
 import {
   Avatar,
   Badge,
@@ -94,13 +104,13 @@ export default function Dashboard() {
     <>
       <PageHead
         eyebrow="SETIAP LANGKAH, BERARTI"
-        title={`Selamat pagi, ${firstName} ☀`}
+        title={`${greeting()}, ${firstName}`}
         description="Mari ciptakan hari yang lebih baik untuk setiap siswa."
         action={
           <>
             <div className="date-chip">
               <CalendarDays size={16} />
-              Sabtu, 17 Oktober 2026
+              {liveDate()}
             </div>
             <Button
               onClick={() => go(canEdit(user.role) ? "attendance" : "reports")}
@@ -132,6 +142,7 @@ export default function Dashboard() {
         </Button>
       </section>
       {user.role === "teacher" && <SchoolReminders />}
+      <TodayWork />
       <div className="section-toolbar">
         <div className="tab-inline">
           <button className="active">Ringkasan sekolah</button>
@@ -323,7 +334,8 @@ export default function Dashboard() {
             </span>
             <div>
               <strong>
-                {reports.length - published} rapor menunggu review
+                {reports.filter((r) => r.status === "Review").length} rapor
+                menunggu review
               </strong>
               <p>Selesaikan sebelum pembagian rapor</p>
             </div>

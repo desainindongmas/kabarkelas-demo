@@ -5,9 +5,25 @@ export const roleNames = {
   parent: "Wali Murid",
   student: "Siswa",
   foundation: "Yayasan",
+  security: "Security",
+};
+export const roleResponsibilities = {
+  principal:
+    "Akademik, pendampingan, persetujuan rapor dan izin, serta tindak lanjut unit.",
+  admin:
+    "Biodata, data sekolah, SPP manual, PPDB, jadwal, dan penyelesaian pengecualian gerbang.",
+  teacher:
+    "Pembelajaran pada kelas dan mapel yang ditugaskan, serta presensi dan izin sendiri.",
+  parent:
+    "Perkembangan anak terhubung, riwayat SPP, dan penjemput yang diizinkan.",
+  student: "Tugas, kuis, materi, dan perkembangan belajar sendiri.",
+  foundation:
+    "Target, prioritas, kebutuhan, dan hasil tindak lanjut lintas unit; data agregat.",
+  security:
+    "Pindai QR, cocokkan penjemput, catat masuk/pulang, dan laporkan kejadian gerbang.",
 };
 const common = ["dashboard", "announcements"];
-const pages = {
+export const pagesByRole = {
   principal: [
     ...common,
     "students",
@@ -23,9 +39,13 @@ const pages = {
     "materials",
     "staff-leave",
     "staff-recap",
-    "pickup",
+    "gate-history",
     "character",
     "tahfizh",
+    "unit-work",
+    "analytics",
+    "workflow",
+    "packages",
   ],
   admin: [
     ...common,
@@ -39,6 +59,10 @@ const pages = {
     "settings",
     "admissions",
     "pickup",
+    "gate-history",
+    "gate-incidents",
+    "analytics",
+    "packages",
   ],
   teacher: [
     ...common,
@@ -53,6 +77,7 @@ const pages = {
     "schedule",
     "materials",
     "staff-self",
+    "analytics",
   ],
   parent: [
     ...common,
@@ -81,16 +106,187 @@ const pages = {
     "character",
     "tahfizh",
   ],
-  foundation: [...common, "foundation", "trust"],
+  foundation: [
+    "dashboard",
+    "foundation",
+    "board-actions",
+    "unit-needs",
+    "meeting",
+    "packages",
+    "trust",
+  ],
+  security: ["dashboard", "gate-scan", "gate-history", "gate-incidents"],
 };
-export function canAccessPage(user, page) {
+export const collectionsByRole = {
+  principal: [
+    "students",
+    "teachers",
+    "classes",
+    "subjects",
+    "grades",
+    "attendance",
+    "assignments",
+    "submissions",
+    "quizzes",
+    "reports",
+    "announcements",
+    "interventions",
+    "schedule",
+    "settings",
+    "materials",
+    "staffAttendance",
+    "leaveRequests",
+    "character",
+    "tahfizh",
+    "pickupLogs",
+    "foundationTasks",
+    "unitNeeds",
+    "schoolTargets",
+    "termSnapshots",
+    "savedReports",
+  ],
+  admin: [
+    "students",
+    "teachers",
+    "classes",
+    "subjects",
+    "announcements",
+    "invoices",
+    "payments",
+    "schedule",
+    "settings",
+    "audit",
+    "admissions",
+    "staffAttendance",
+    "leaveRequests",
+    "uniforms",
+    "uniformOverrides",
+    "pickupPersons",
+    "pickupLogs",
+    "gateIncidents",
+    "savedReports",
+  ],
+  teacher: [
+    "students",
+    "teachers",
+    "classes",
+    "subjects",
+    "grades",
+    "attendance",
+    "assignments",
+    "submissions",
+    "quizzes",
+    "reports",
+    "announcements",
+    "interventions",
+    "schedule",
+    "settings",
+    "materials",
+    "staffAttendance",
+    "leaveRequests",
+    "uniforms",
+    "uniformOverrides",
+    "character",
+    "tahfizh",
+    "termSnapshots",
+    "savedReports",
+  ],
+  parent: [
+    "students",
+    "classes",
+    "subjects",
+    "grades",
+    "attendance",
+    "assignments",
+    "submissions",
+    "reports",
+    "announcements",
+    "invoices",
+    "payments",
+    "interventions",
+    "schedule",
+    "settings",
+    "materials",
+    "uniforms",
+    "uniformOverrides",
+    "character",
+    "tahfizh",
+    "pickupPersons",
+    "pickupLogs",
+  ],
+  student: [
+    "students",
+    "classes",
+    "subjects",
+    "grades",
+    "attendance",
+    "assignments",
+    "submissions",
+    "quizzes",
+    "reports",
+    "announcements",
+    "interventions",
+    "schedule",
+    "settings",
+    "materials",
+    "uniforms",
+    "uniformOverrides",
+    "character",
+    "tahfizh",
+  ],
+  foundation: [
+    "settings",
+    "foundationTasks",
+    "unitNeeds",
+    "schoolTargets",
+    "termSnapshots",
+  ],
+  security: ["students", "classes", "settings", "pickupLogs", "gateIncidents"],
+};
+export const administrativeBackupKinds = [
+  "students",
+  "teachers",
+  "classes",
+  "subjects",
+  "announcements",
+  "invoices",
+  "payments",
+  "schedule",
+  "settings",
+  "audit",
+  "admissions",
+  "staffAttendance",
+  "leaveRequests",
+  "uniforms",
+  "uniformOverrides",
+  "pickupPersons",
+  "pickupLogs",
+  "gateIncidents",
+];
+const optional = {
+  character: "character",
+  tahfizh: "tahfizh",
+  admissions: "admissions",
+};
+export function canAccessPage(user, page, settings) {
+  if (!user) return false;
+  const allowed =
+    pagesByRole[user.role]?.includes(page) ||
+    (user.role === "teacher" &&
+      user.isHomeroom &&
+      ["interventions", "character", "tahfizh"].includes(page));
   return (
-    !!user &&
-    (pages[user.role]?.includes(page) ||
-      (user.role === "teacher" &&
-        user.isHomeroom &&
-        ["interventions", "character", "tahfizh"].includes(page)))
+    !!allowed &&
+    (!optional[page] ||
+      !settings?.enabledModules ||
+      settings.enabledModules.includes(optional[page]))
   );
+}
+export function canReadCollection(user, kind) {
+  return !!collectionsByRole[user?.role]?.includes(kind);
+}
+export function isPro(settings) {
+  return ["Pro", "Yayasan"].includes(settings?.plan || "Pro");
 }
 export function canEditAcademic(user) {
   return user?.role === "teacher";
@@ -104,6 +300,14 @@ export function canReviewReport(user, classId) {
     (user?.role === "teacher" &&
       user.isHomeroom &&
       (!classId || classId === user.homeroomClassId))
+  );
+}
+export function canPublishReport(user, report, settings) {
+  return (
+    canReviewReport(user, report?.classId) &&
+    (!isPro(settings) ||
+      settings?.approvalMode !== "two-step" ||
+      user.role === "principal")
   );
 }
 export function canIntervene(user) {

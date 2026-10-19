@@ -7,7 +7,7 @@
 ## Pemeriksaan
 
 - Buka situs HTTPS: dashboard akademik dan EWS tampil, lalu coba **Ganti peran**.
-- Admin melihat dashboard administrasi tanpa menu EWS/nilai siswa. Guru + wali kelas memiliki akses tambahan khusus X IPA 1.
+- Admin melihat dashboard administrasi tanpa menu EWS/nilai siswa. Guru + wali kelas memiliki akses tambahan khusus X IPA 1. Security hanya memiliki dashboard, pemindai QR, riwayat dan konfirmasi gerbang.
 - Simpan biodata sebagai Admin atau nilai sebagai Guru, lalu reload: perubahan tetap tersedia untuk browser itu.
 - SPP dicatat Admin sebagai tunai/transfer manual; Wali Murid membaca riwayat dan mengunduh kuitansi.
 - Rapor massal menghasilkan ZIP berisi PDF di browser. Tidak ada `report-worker-background` pada versi ini; hapus konfigurasi Functions lama yang dipasang manual bila ada.
@@ -17,7 +17,7 @@
 
 `app.mjs` melayani server lokal dan function Netlify yang sama. Entry point menggunakan Web Request API v2 untuk mempertahankan konfigurasi Blobs dari platform, termasuk `uncachedEdgeURL`. Adapter mempertahankan kedua cookie sesi/ruang pengunjung. Setiap eksekusi memulihkan database SQLite sementara dari snapshot Blobs, dan menyimpan perubahan menggunakan ETag compare-and-set. Kesalahan konflik 409 meminta pengguna memuat ulang sebelum mengulangi perubahan.
 
-Migrasi menambahkan data operasional pada ruang demo versi sebelumnya tanpa mereset biodata/nilai yang telah diubah. Role wali kelas lama dinormalisasi menjadi Guru + wali kelas, dan super admin lama menjadi Yayasan. Data chat/integrasi lama tidak lagi diekspos maupun dipakai. Backup baru hanya memasukkan koleksi yang masih didukung.
+Migrasi menambahkan data operasional pada ruang demo versi sebelumnya tanpa mereset biodata/nilai yang telah diubah. Migrasi product-v3 menambahkan arahan unit, target, kebutuhan, riwayat contoh semester, pengaturan paket dan kejadian gerbang. Role wali kelas lama dinormalisasi menjadi Guru + wali kelas, dan super admin lama menjadi Yayasan. Data chat/integrasi lama tidak lagi diekspos maupun dipakai. Backup baru hanya memasukkan koleksi yang masih didukung.
 
 PDF, ZIP dan Excel dibuat pada perangkat pengguna. Tidak ada polling, background function, payment gateway, email, WhatsApp atau panggilan model AI. Pengumuman dan pengingat berada dalam aplikasi. Functions, Blobs, bandwidth, dan build tetap mengikuti kuota akun Netlify; pantau usage untuk menjaga pemakaian free tier.
 
@@ -26,3 +26,9 @@ PDF, ZIP dan Excel dibuat pada perangkat pengguna. Tidak ada polling, background
 Periksa **Deploy log** dan **Functions → api → log**. Pastikan deploy berasal dari commit terbaru, Node/Functions runtime 24 tidak ditimpa pengaturan UI, dan Blobs tersedia pada situs. Entry point mengembalikan error JSON aman ketika konfigurasi Blobs tidak tersedia. `/api/bootstrap` memerlukan cookie sesi demo; membuka endpoint dari browser baru sebelum sesi dibuat menghasilkan 401.
 
 Tes lokal memanggil default export Web API Function dengan konteks Netlify terinjeksi dan emulator Blobs resmi: cookie, persistensi, isolasi pengunjung, konflik penyimpanan dan hak akses. Regresi adapter Lambda lama juga diuji. Pemeriksaan lokal tidak membuktikan deploy di akun Netlify pengguna sudah aktif; periksa commit yang ditampilkan pada deploy setelah push.
+
+## Kamera, QR, dan hak akses
+
+Kamera memerlukan HTTPS dan izin perangkat. ZXing dimuat dari bundle lokal saat pemindai dipakai; tidak mengirim frame ke layanan eksternal. Unggah gambar dan kode kartu tersedia sebagai alternatif. Hasil pindai diverifikasi API; Security tidak dapat mengubah daftar penjemput atau menyetujui pengecualian sendiri. Admin memberi izin satu kali yang tanggal dan penggunaannya diperiksa server.
+
+Uji role baru dengan Ganti peran. Bila dialog pengenalan belum muncul pada browser lama, gunakan Pusat bantuan untuk memulai skenario. Paket demo tidak memproses pembayaran. Pengingat hanya tampil saat aplikasi dibuka. Lihat [ROLE_ACCESS.md](ROLE_ACCESS.md) untuk cakupan ketujuh role, backup terpisah, dan batas API.

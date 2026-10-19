@@ -9,6 +9,13 @@ import JSZip from "jszip";
 
 const base = "http://127.0.0.1:3197";
 let server, temp, browser;
+async function newContext(options = {}) {
+  const context = await browser.newContext(options);
+  await context.addInitScript(() =>
+    localStorage.setItem("kk-welcome-v3", "seen"),
+  );
+  return context;
+}
 const launch = () =>
   new Promise((resolve, reject) => {
     server = spawn(process.execPath, ["server.mjs"], {
@@ -71,7 +78,7 @@ after(async () => {
 });
 
 test("startup shows the service error, stops the spinner, and can recover after retry", async () => {
-  const context = await browser.newContext();
+  const context = await newContext();
   const page = await context.newPage();
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
@@ -92,7 +99,10 @@ test("startup shows the service error, stops the spinner, and can recover after 
   await page.unroute("**/api/bootstrap");
   await page.getByRole("button", { name: "Coba lagi" }).click();
   await page.locator("main h1").waitFor();
-  assert.match(await page.locator("main h1").textContent(), /Selamat pagi/);
+  assert.match(
+    await page.locator("main h1").textContent(),
+    /Selamat (pagi|siang|sore|malam)/,
+  );
   await context.close();
 });
 
@@ -218,6 +228,8 @@ test("interventions retain PIC, target, status and outcome", async () => {
     ...i,
     status: "Selesai",
     note: "Kehadiran dan pemahaman meningkat.",
+    outcome: "Membaik",
+    evaluationNote: "Evaluasi dua minggu menunjukkan perkembangan positif.",
   });
   assert.equal(r.body.status, "Selesai");
 });
@@ -344,7 +356,7 @@ test("settings enforce total weights; backup restore is scoped and auditable", a
     400,
   );
   const { body: backup } = await request(c, "/api/backup");
-  assert.equal(backup.format, "KabarKelas-2");
+  assert.equal(backup.format, "KabarKelas-3");
   assert.equal(
     (await request(c, "/api/restore", { ...backup, school: "s2" })).status,
     400,
@@ -400,7 +412,7 @@ test("sessions and edits survive a server restart", async () => {
   );
 });
 test("each role renders allowed screens; Admin and Foundation cannot open academic pages", async () => {
-  const context = await browser.newContext({
+  const context = await newContext({
       viewport: { width: 1440, height: 1000 },
     }),
     page = await context.newPage(),
@@ -422,7 +434,10 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
       "materials",
       "staff-leave",
       "staff-recap",
-      "pickup",
+      "gate-history",
+      "unit-work",
+      "workflow",
+      "analytics",
       "character",
       "tahfizh",
     ],
@@ -461,7 +476,16 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
       "tahfizh",
     ],
     student: ["dashboard", "assignments", "quizzes", "reports", "uniform"],
-    foundation: ["dashboard", "foundation", "trust", "announcements"],
+    foundation: [
+      "dashboard",
+      "foundation",
+      "trust",
+      "board-actions",
+      "unit-needs",
+      "meeting",
+      "packages",
+    ],
+    security: ["dashboard", "gate-scan", "gate-history", "gate-incidents"],
   };
   for (const [role, routes] of Object.entries(screens)) {
     await context.request.post(base + "/api/session", {
@@ -490,7 +514,7 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
         role + ":" + route,
       );
     }
-    if (["admin", "foundation"].includes(role)) {
+    if (["admin", "foundation", "security"].includes(role)) {
       assert.equal(await page.locator('.nav-item[href="#/ews"]').count(), 0);
       await page.goto(base + "/#/ews");
       await page
@@ -510,6 +534,7 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
   await page.screenshot({
     path: "test-results/student-360-desktop.png",
     fullPage: true,
+    animations: "disabled",
   });
   await page.goto(base + "/#/dashboard");
   await page.locator(".ews-overview").waitFor();
@@ -517,6 +542,7 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
   await page.screenshot({
     path: "test-results/dashboard-desktop.png",
     fullPage: true,
+    animations: "disabled",
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
@@ -532,12 +558,13 @@ test("each role renders allowed screens; Admin and Foundation cannot open academ
   await page.screenshot({
     path: "test-results/dashboard-mobile.png",
     fullPage: true,
+    animations: "disabled",
   });
   assert.deepEqual(errors, []);
   await context.close();
 });
 test("browser role switch, assignment submission, timed quiz, PDF download and parent portal work", async () => {
-  const context = await browser.newContext({
+  const context = await newContext({
     acceptDownloads: true,
     viewport: { width: 1365, height: 1000 },
   });
@@ -588,11 +615,12 @@ test("browser role switch, assignment submission, timed quiz, PDF download and p
   await p.screenshot({
     path: "test-results/parent-portal.png",
     fullPage: true,
+    animations: "disabled",
   });
   await context.close();
 });
 
-test("six primary roles and academic capabilities are enforced in API payloads", async () => {
+test("seven primary roles and academic capabilities are enforced in API payloads", async () => {
   const admin = await login();
   const { body: a } = await request(admin, "/api/bootstrap");
   for (const kind of [
@@ -772,25 +800,25 @@ test("teacher leave is private and only principal can approve; P5 needs own home
     403,
   );
 });
-test("parent guardian cards are signed, child-scoped and time-limited; only Admin records pickup", async () => {
+test("parent guardian cards are signed, child-scoped and time-limited; only Security records pickup", async () => {
   const parent = await login("parent");
   const { body: b } = await request(parent, "/api/bootstrap");
   const person = b.data.pickupPersons[0];
   assert.match(person.qr, /^KK2\./);
-  const admin = await login();
+  const security = await login("security");
   assert.equal(
-    (await request(admin, "/api/pickup/verify", { qr: person.qr })).status,
+    (await request(security, "/api/pickup/verify", { qr: person.qr })).status,
     200,
   );
   assert.equal(
     (
-      await request(admin, "/api/pickup/verify", {
+      await request(security, "/api/pickup/verify", {
         qr: person.qr.slice(0, -5) + "xxxxx",
       })
     ).status,
     400,
   );
-  const other = await login("admin", "s2");
+  const other = await login("security", "s2");
   assert.equal(
     (await request(other, "/api/pickup/verify", { qr: person.qr })).status,
     403,
@@ -816,14 +844,27 @@ test("parent guardian cards are signed, child-scoped and time-limited; only Admi
     ).status,
     403,
   );
-  const log = await request(admin, "/api/pickupLogs", {
+  assert.equal(
+    (
+      await request(security, "/api/pickupLogs", {
+        studentId: "s1-st-0",
+        qr: person.qr,
+        action: "Antar",
+      })
+    ).status,
+    200,
+  );
+  const log = await request(security, "/api/pickupLogs", {
     studentId: "s1-st-0",
     qr: person.qr,
     action: "Jemput",
   });
   assert.equal(log.status, 200);
   assert.equal(log.body.verified, true);
-  assert.equal((await request(admin, "/api/pickupLogs", log.body)).status, 403);
+  assert.equal(
+    (await request(security, "/api/pickupLogs", log.body)).status,
+    403,
+  );
   const temporary = await request(parent, "/api/pickupPersons", {
     name: "Budi Uji",
     studentId: "s1-st-0",
@@ -837,7 +878,7 @@ test("parent guardian cards are signed, child-scoped and time-limited; only Admi
     (p) => p.id === temporary.body.id,
   );
   assert.equal(
-    (await request(admin, "/api/pickup/verify", { qr: expired.qr })).status,
+    (await request(security, "/api/pickup/verify", { qr: expired.qr })).status,
     400,
   );
 });
@@ -873,7 +914,7 @@ test("Admin edits uniform exceptions and schedules; family and teachers only rea
   );
 });
 test("browser bulk PDF generation downloads a valid ZIP without server jobs or polling", async () => {
-  const context = await browser.newContext({ acceptDownloads: true });
+  const context = await newContext({ acceptDownloads: true });
   await context.request.post(base + "/api/session", {
     data: { role: "principal" },
   });
@@ -902,6 +943,198 @@ test("browser bulk PDF generation downloads a valid ZIP without server jobs or p
   assert.equal(
     requests.some(
       (url) => url.includes("report-jobs") || url.includes("report-worker"),
+    ),
+    false,
+  );
+  await context.close();
+});
+
+test("Security scanner decodes an uploaded QR image and exposes exactly the gate menus", async () => {
+  const context = await newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.request.post(base + "/api/session", {
+    data: { role: "security" },
+  });
+  const page = await context.newPage(),
+    errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(base + "/#/gate-scan");
+  await page
+    .getByRole("heading", { name: "Pindai QR gerbang", exact: true })
+    .waitFor();
+  const hrefs = await page
+    .locator(".nav-item")
+    .evaluateAll((els) => els.map((e) => e.getAttribute("href")).sort());
+  assert.deepEqual(
+    hrefs,
+    ["#/dashboard", "#/gate-scan", "#/gate-history", "#/gate-incidents"].sort(),
+  );
+  const sample = await (
+    await context.request.get(base + "/api/demo-gate-card")
+  ).json();
+  const { default: qrcode } = await import("qrcode-generator");
+  const qr = qrcode(0, "M");
+  qr.addData(sample.qr);
+  qr.make();
+  const imagePage = await context.newPage();
+  await imagePage.setContent(
+    '<div id="qr" style="background:white;padding:30px;width:520px">' +
+      qr.createSvgTag({ cellSize: 5, margin: 5, scalable: true }) +
+      "</div>",
+  );
+  const png = await imagePage.locator("#qr").screenshot();
+  await imagePage.close();
+  await page
+    .getByLabel("Unggah gambar QR")
+    .setInputFiles({
+      name: "Kartu-penjemput.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+  await page
+    .getByText("Kartu aktif dan terverifikasi")
+    .waitFor({ timeout: 10000 })
+    .catch(async () => {
+      throw new Error(
+        "QR upload: " +
+          (await page.locator("main").innerText()) +
+          " browser errors: " +
+          errors.join(","),
+      );
+    });
+  assert.match(
+    await page.locator(".verified-card").innerText(),
+    /Nadia Azzahra/,
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "Catat masuk / antar" }).isEnabled(),
+    true,
+  );
+  await page.getByRole("button", { name: "Catat masuk / antar" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector(".verified-card")?.textContent.includes("Antar ·"),
+  );
+  await page.getByRole("button", { name: "Catat pulang / jemput" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector(".verified-card")?.textContent.includes("Jemput ·"),
+  );
+  await page.screenshot({
+    path: "test-results/security-qr-desktop.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  for (const route of [
+    "grades",
+    "finance",
+    "students/s1-st-0",
+    "settings",
+    "foundation",
+    "packages",
+    "pickup",
+    "staff-attendance",
+  ]) {
+    await page.goto(base + "/#/" + route);
+    await page
+      .getByRole("heading", { name: "Halaman tidak tersedia untuk peran ini" })
+      .waitFor();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  await page.goto(base + "/#/gate-scan");
+  await page.locator(".scanner-window").waitFor();
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  await page.screenshot({
+    path: "test-results/security-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+test("welcome selects a role and guided tour advances only after a successful action", async () => {
+  const context = await browser.newContext({
+      viewport: { width: 1440, height: 1000 },
+    }),
+    page = await context.newPage();
+  await page.goto(base);
+  const welcome = page.getByRole("dialog", { name: "Pilih pengalaman demo" });
+  await welcome.waitFor();
+  await page.screenshot({
+    path: "test-results/demo-welcome.png",
+    fullPage: false,
+    animations: "disabled",
+  });
+  await welcome.getByRole("button", { name: /Security Pindai QR/ }).click();
+  await welcome.waitFor({ state: "hidden" });
+  const tour = page.getByLabel("Panduan skenario demo");
+  await tour.waitFor();
+  assert.match(await tour.innerText(), /1\/3/);
+  await tour.getByRole("button", { name: "Buka langkah ini" }).click();
+  await page.getByRole("button", { name: "Gunakan kartu dummy" }).click();
+  assert.match(await tour.innerText(), /1\/3/);
+  await page
+    .getByRole("button", { name: "Verifikasi kode", exact: true })
+    .click();
+  await page.getByText("Kartu aktif dan terverifikasi").waitFor();
+  await page.waitForFunction(() =>
+    document.querySelector(".tour-dock")?.textContent.includes("2/3"),
+  );
+  await context.close();
+});
+test("foundation meeting PDF reflects saved follow-ups and contains no pupil detail", async () => {
+  const context = await newContext({
+    acceptDownloads: true,
+    viewport: { width: 1440, height: 1000 },
+  });
+  await context.request.post(base + "/api/session", {
+    data: { role: "foundation" },
+  });
+  const page = await context.newPage();
+  await page.goto(base + "/#/dashboard");
+  await page.locator(".board-hero").waitFor();
+  await page.screenshot({
+    path: "test-results/foundation-dashboard.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  for (const denied of [
+    "students",
+    "grades",
+    "finance",
+    "pickup",
+    "gate-scan",
+    "settings",
+    "announcements",
+  ])
+    assert.equal(
+      await page.locator(`.nav-item[href="#/${denied}"]`).count(),
+      0,
+      denied,
+    );
+  await page.goto(base + "/#/meeting");
+  await page.locator(".meeting-preview").waitFor();
+  assert.equal(
+    (await page.locator("main").innerText()).includes("Nadia Azzahra"),
+    false,
+  );
+  const pending = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Unduh laporan rapat", exact: true })
+    .click();
+  const download = await pending,
+    bytes = await readFile(await download.path());
+  assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  await page.goto(base + "/#/dashboard");
+  await page.locator(".board-hero").waitFor();
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
     ),
     false,
   );

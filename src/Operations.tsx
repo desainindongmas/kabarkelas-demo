@@ -829,6 +829,9 @@ function QRCard({ person }: { person: Row }) {
     a.href = url;
     a.download = `Kartu-jemput-${person.name}.svg`;
     a.click();
+    window.dispatchEvent(
+      new CustomEvent("kk:action", { detail: { path: "download:qr" } }),
+    );
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
@@ -902,46 +905,6 @@ export function Pickup() {
           />
         }
       />
-      {(admin || user.role === "principal") && (
-        <Panel
-          title="Verifikasi kartu QR"
-          subtitle="Pindai dengan pembaca QR perangkat, lalu tempel kode kartu. Selalu cocokkan dengan identitas penjemput."
-        >
-          <div className="operation-actions">
-            <input
-              aria-label="Kode QR penjemput"
-              placeholder="Tempel kode KK2.…"
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setVerified(null);
-              }}
-            />
-            <Button disabled={busy || !code} onClick={verify}>
-              Verifikasi QR
-            </Button>
-          </div>
-          {verified && (
-            <div className="callout green">
-              <ShieldCheck size={22} />
-              <p>
-                <strong>{verified.person.name}</strong> ·{" "}
-                {verified.person.relationship}
-                <br />
-                {verified.student.name} ·{" "}
-                {verified.temporary
-                  ? "Pengganti hari ini"
-                  : "Penjemput terdaftar"}
-              </p>
-              {admin && (
-                <Button onClick={() => setRecord(true)}>
-                  Catat antar / jemput
-                </Button>
-              )}
-            </div>
-          )}
-        </Panel>
-      )}
       <Panel
         title="Penjemput yang diizinkan"
         action={
@@ -999,21 +962,7 @@ export function Pickup() {
         </div>
         {!people.length && <Empty />}
       </Panel>
-      <Panel
-        title="Riwayat antar & jemput"
-        action={
-          admin ? (
-            <Button
-              onClick={() => {
-                setVerified(null);
-                setRecord(true);
-              }}
-            >
-              Catat manual
-            </Button>
-          ) : undefined
-        }
-      >
+      <Panel title="Riwayat antar & jemput">
         <div className="table-scroll">
           <table>
             <thead>
@@ -1080,46 +1029,6 @@ export function Pickup() {
           ]}
           onClose={() => setForm(null)}
           onSave={(v) => save("pickupPersons", v)}
-        />
-      )}
-      {record && (
-        <FormModal
-          title="Catat antar / jemput"
-          initial={{
-            studentId,
-            action: "Jemput",
-            personId:
-              verified?.person.id ||
-              people.find((p) => p.status === "Aktif")?.id,
-            qr: verified ? code : undefined,
-          }}
-          fields={[
-            {
-              key: "action",
-              label: "Kegiatan",
-              options: options(["Antar", "Jemput"]),
-              required: true,
-            },
-            ...(!verified
-              ? [
-                  {
-                    key: "personId",
-                    label: "Penjemput terdaftar",
-                    options: people
-                      .filter((p) => p.status === "Aktif")
-                      .map((p) => ({ value: p.id, label: p.name })),
-                  },
-                  { key: "personName", label: "Nama jika tidak terdaftar" },
-                ]
-              : []),
-            {
-              key: "note",
-              label: "Catatan (wajib jika tidak terdaftar)",
-              type: "textarea",
-            },
-          ]}
-          onClose={() => setRecord(false)}
-          onSave={(v) => save("pickupLogs", v)}
         />
       )}
       {card && (

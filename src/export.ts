@@ -124,6 +124,9 @@ export async function reportPDF(
   }
   if (returnBlob) return doc.output("blob");
   doc.save(`Rapor-${student.name.replaceAll(" ", "-")}.pdf`);
+  window.dispatchEvent(
+    new CustomEvent("kk:action", { detail: { path: "download:report" } }),
+  );
 }
 export async function receiptPDF(invoice: Row, student: Row, school: Row) {
   const { jsPDF } = await import("jspdf");
@@ -144,6 +147,9 @@ export async function receiptPDF(invoice: Row, student: Row, school: Row) {
   ];
   lines.forEach((l, i) => doc.text(l, 20, 48 + i * 12));
   doc.save(`Kuitansi-${student.nisn}.pdf`);
+  window.dispatchEvent(
+    new CustomEvent("kk:action", { detail: { path: "download:receipt" } }),
+  );
 }
 export function downloadJSON(value: unknown, name: string) {
   const url = URL.createObjectURL(
@@ -185,4 +191,55 @@ export async function tablePDF(rows: Record<string, unknown>[], title: string) {
     y += 10;
   });
   doc.save(title.replaceAll(" ", "-") + ".pdf");
+}
+
+export async function narrativePDF(
+  title: string,
+  sections: { title: string; lines: string[] }[],
+) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF();
+  let y = 20;
+  doc.setFontSize(17);
+  doc.text(title, 16, y);
+  y += 15;
+  for (const section of sections) {
+    if (y > 255) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(section.title, 16, y);
+    y += 9;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    for (const line of section.lines) {
+      const parts = doc.splitTextToSize(line, 175);
+      for (const part of parts) {
+        if (y > 275) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(part, 16, y);
+        y += 5;
+      }
+      y += 4;
+    }
+    y += 7;
+  }
+  for (let i = 1; i <= doc.getNumberOfPages(); i++) {
+    doc.setPage(i);
+    doc.setTextColor(120);
+    doc.setFontSize(7);
+    doc.text(
+      `KabarKelas | DATA DUMMY | ${i}/${doc.getNumberOfPages()}`,
+      16,
+      289,
+    );
+  }
+  doc.save(title.replaceAll(" ", "-") + ".pdf");
+  window.dispatchEvent(
+    new CustomEvent("kk:action", { detail: { path: "download:meeting" } }),
+  );
 }

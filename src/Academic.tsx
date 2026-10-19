@@ -30,6 +30,9 @@ import {
   avg,
   canEdit,
   canReviewReport,
+  canPublishReport,
+  isPro,
+  todayWIB,
   canAccessPage,
   gradeDisplay,
   currency,
@@ -55,7 +58,7 @@ import {
   SearchBox,
   tone,
 } from "./ui";
-import { exportExcel, reportPDF } from "./export";
+import { exportExcel, reportPDF, downloadJSON } from "./export";
 import { api } from "./App";
 
 export function Attendance() {
@@ -297,9 +300,13 @@ export function Attendance() {
 const ActivityIcon = ClipboardCheck,
   ShieldIcon = CheckCircle2;
 export function Grades() {
-  const { data, user, reload, toast } = useApp();
-  const [cls, setCls] = useState(data.classes[0]?.id || ""),
-    [subject, setSubject] = useState(data.subjects[0]?.id || ""),
+  const { data, user, reload, toast, selectedId } = useApp();
+  const [cls, setCls] = useState(
+      selectedId.split("~")[0] || data.classes[0]?.id || "",
+    ),
+    [subject, setSubject] = useState(
+      selectedId.split("~")[1] || data.subjects[0]?.id || "",
+    ),
     [query, setQuery] = useState(""),
     [changes, setChanges] = useState<Record<string, Partial<Row>>>({}),
     [busy, setBusy] = useState(false);
@@ -311,11 +318,28 @@ export function Grades() {
       s.name.toLowerCase().includes(query.toLowerCase()),
   );
   const selected = data.subjects.find((s) => s.id === subject);
-  const rows = data.grades.filter(
+  const existing = data.grades.filter(
     (g) =>
       students.some((s) => s.id === g.studentId) &&
       (personal || g.subjectId === subject),
   );
+  const rows: Row[] = personal
+    ? existing
+    : students.map(
+        (student) =>
+          existing.find((g) => g.studentId === student.id) || {
+            id: `${student.id}-${subject}`,
+            studentId: student.id,
+            subjectId: subject,
+            subject: selected?.name,
+            daily: 0,
+            midterm: 0,
+            final: 0,
+            score: 0,
+            description: "",
+            missing: true,
+          },
+      );
   const weights = data.settings[0] || {};
   const changed = (g: Row) => ({ ...g, ...changes[g.id] });
   const setValue = (g: Row, key: string, value: number) => {
@@ -640,7 +664,7 @@ export function Assignments() {
     <>
       <PageHead
         eyebrow="BELAJAR DENGAN TUJUAN"
-        title="Tugas & kuis"
+        title="Tugas & PR"
         description="Ruang untuk berlatih, bereksplorasi, dan menunjukkan pemahaman."
         action={
           editable ? (
@@ -1247,17 +1271,31 @@ export function Quizzes() {
   );
 }
 export function Reports() {
-  const { data, user, school, save, reload, toast } = useApp();
+  const { data, user, school, save, reload, toast, go, selectedId } = useApp();
   const [cls, setCls] = useState("all"),
-    [status, setStatus] = useState("all"),
+    [status, setStatus] = useState(
+      ["Draf", "Review", "Terbit"].includes(selectedId) ? selectedId : "all",
+    ),
     [query, setQuery] = useState(""),
     [page, setPage] = useState(1),
     [preview, setPreview] = useState<Row | undefined>(),
     [selected, setSelected] = useState<Set<string>>(new Set()),
-    [starting, setStarting] = useState(false);
+    [starting, setStarting] = useState(false),
+    [readiness, setReadiness] = useState(false);
   const editable =
     user.role === "principal" || (user.role === "teacher" && user.isHomeroom);
   const canPublish = canReviewReport(user, preview?.classId);
+  const canFinalize = canPublishReport(user, preview, data.settings[0]);
+  const missing = data.students.flatMap((student) =>
+    data.subjects
+      .filter(
+        (subject) =>
+          !data.grades.some(
+            (g) => g.studentId === student.id && g.subjectId === subject.id,
+          ),
+      )
+      .map((subject) => ({ student, subject })),
+  );
   const jobs = useReportJobs(user);
   const rows = data.reports.filter((r) => {
     const s = data.students.find((s) => s.id === r.studentId);
@@ -1297,32 +1335,77 @@ export function Reports() {
       <PageHead
         eyebrow="CERITA BELAJAR DALAM SATU LAPORAN"
         title="Rapor digital"
-        description="Susun, tinjau, dan bagikan capaian siswa dengan lebih bermakna."
+        description={
+          ["parent", "student"].includes(user.role)
+            ? "Lihat capaian semester dan unduh rapor yang sudah diterbitkan sekolah."
+            : "Susun, tinjau, dan bagikan capaian siswa dengan lebih bermakna."
+        }
         action={
           editable ? (
-            <Button onClick={startJob} disabled={starting || !rows.length}>
-              <Layers size={16} />
-              Generate massal {selected.size ? `(${selected.size})` : ""}
-            </Button>
+            <>
+              {user.role === "principal" && (
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    try {
+                      downloadJSON(
+                        await api("/api/academic-backup"),
+                        "Cadangan-Akademik-KabarKelas.json",
+                      );
+                    } catch (e) {
+                      toast((e as Error).message, true);
+                    }
+                  }}
+                >
+                  Cadangan akademik
+                </Button>
+              )}
+              <Button onClick={startJob} disabled={starting || !rows.length}>
+                <Layers size={16} />
+                Generate massal {selected.size ? `(${selected.size})` : ""}
+              </Button>
+            </>
           ) : undefined
         }
       />
-      <div className="metrics three">
-        {["Draf", "Review", "Terbit"].map((s, i) => (
-          <Metric
-            key={s}
-            label={["Masih disusun", "Menunggu review", "Siap dibagikan"][i]}
-            value={data.reports.filter((r) => r.status === s).length}
-            icon={[FileText, Clock3, FileCheck2][i]}
-            tone={["amber", "blue", "teal"][i]}
-            note="rapor semester ganjil"
-            onClick={() => {
-              setStatus(s);
-              setPage(1);
-            }}
-          />
-        ))}
-      </div>
+      {editable && (
+        <div className="report-readiness">
+          <div>
+            <strong>
+              {missing.length
+                ? `${missing.length} nilai belum lengkap`
+                : "Nilai seluruh siswa lengkap"}
+            </strong>
+            <p>
+              {isPro(data.settings[0])
+                ? `Tenggat rapor ${date(data.settings[0]?.reportDue)}. `
+                : ""}
+              Periksa kelengkapan sebelum penerbitan.
+            </p>
+          </div>
+          <Button variant="secondary" onClick={() => setReadiness(true)}>
+            Periksa kelengkapan
+          </Button>
+        </div>
+      )}
+      {!["parent", "student"].includes(user.role) && (
+        <div className="metrics three">
+          {["Draf", "Review", "Terbit"].map((s, i) => (
+            <Metric
+              key={s}
+              label={["Masih disusun", "Menunggu review", "Siap dibagikan"][i]}
+              value={data.reports.filter((r) => r.status === s).length}
+              icon={[FileText, Clock3, FileCheck2][i]}
+              tone={["amber", "blue", "teal"][i]}
+              note="rapor semester ganjil"
+              onClick={() => {
+                setStatus(s);
+                setPage(1);
+              }}
+            />
+          ))}
+        </div>
+      )}
       {jobs
         .slice(-3)
         .reverse()
@@ -1638,10 +1721,22 @@ export function Reports() {
                     setPreview(r);
                   }}
                 >
-                  Simpan & ajukan review
+                  {isPro(data.settings[0]) &&
+                  data.settings[0]?.approvalMode === "two-step" &&
+                  user.role === "teacher"
+                    ? "Validasi wali kelas"
+                    : "Simpan & ajukan review"}
                 </Button>
-                {canPublish && (
+                {canFinalize && (
                   <Button
+                    disabled={
+                      !!(
+                        isPro(data.settings[0]) &&
+                        data.settings[0]?.approvalMode === "two-step" &&
+                        preview.status !== "Terbit" &&
+                        !preview.homeroomReviewed
+                      )
+                    }
                     onClick={async () => {
                       const r = await save("reports", {
                         ...preview,
@@ -1658,6 +1753,58 @@ export function Reports() {
               </>
             )}
           </footer>
+        </Modal>
+      )}
+      {readiness && (
+        <Modal
+          title="Pemeriksaan kelengkapan rapor"
+          onClose={() => setReadiness(false)}
+          wide
+        >
+          {missing.length ? (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Siswa</th>
+                    <th>Mapel belum diisi</th>
+                    <th>Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missing.map(({ student, subject }) => (
+                    <tr key={student.id + subject.id}>
+                      <td>{student.name}</td>
+                      <td>{subject.name}</td>
+                      <td>
+                        {user.role === "teacher" &&
+                        user.subjectIds.includes(subject.id) ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() =>
+                              go("grades", student.classId + "~" + subject.id)
+                            }
+                          >
+                            Lengkapi nilai
+                          </Button>
+                        ) : (
+                          <span>
+                            Perlu diisi guru pengampu{" "}
+                            {subject.teacher || subject.name}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Empty
+              title="Nilai seluruh siswa sudah lengkap"
+              description="Lanjutkan review dan persetujuan sesuai alur sekolah."
+            />
+          )}
         </Modal>
       )}
     </>
