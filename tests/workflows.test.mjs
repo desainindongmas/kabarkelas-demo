@@ -1066,6 +1066,7 @@ test("welcome selects a role and guided tour advances only after a successful ac
     }),
     page = await context.newPage();
   await page.goto(base);
+  await page.locator(".visitor-header").getByRole("button", { name: "Jelajahi demo" }).click();
   const welcome = page.getByRole("dialog", { name: "Pilih pengalaman demo" });
   await welcome.waitFor();
   await welcome.getByLabel("Paket demo awal").selectOption("Standard");
@@ -1334,6 +1335,295 @@ test("Yayasan trial keeps Admin and Security out of academics and family risk st
       await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
       assert.equal(await page.locator(".student-ews, .ews-overview, .pro-example").count(), 0, role);
     }
+  } finally {
+    await context.request.post(base + "/api/session", { data: { role: "principal", plan: "Pro" } });
+    await context.close();
+  }
+});
+
+test("new visitors can take, skip, and reopen the short tour before exploring a role", async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  try {
+    const page = await context.newPage();
+    const businessRequests = [];
+    page.on("request", (request) => {
+      if (/\/api\/(bootstrap|session)$/.test(request.url())) businessRequests.push(request.url());
+    });
+    await page.goto(base);
+    await page.getByRole("heading", { name: /Kenali manfaatnya/ }).waitFor();
+    assert.deepEqual(businessRequests, []);
+    assert.equal(await page.getByRole("dialog", { name: "Pilih pengalaman demo" }).count(), 0);
+    await page.screenshot({ path: "test-results/visitor-start-desktop.png", animations: "disabled" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "test-results/visitor-start-mobile.png", fullPage: true, animations: "disabled" });
+
+    await page.getByRole("button", { name: "Mulai tur singkat", exact: true }).click();
+    const tour = page.getByRole("dialog", { name: "Tur singkat KabarKelas" });
+    await tour.getByLabel("Langkah 1 dari 4").waitFor();
+    await tour.getByRole("button", { name: "Langkah berikutnya" }).click();
+    await tour.getByLabel("Langkah 2 dari 4").waitFor();
+    assert.match(await tour.innerText(), /Admin dan Security tetap tidak memperoleh akses akademik/);
+    await tour.getByRole("button", { name: "Kembali", exact: true }).click();
+    await tour.getByLabel("Langkah 1 dari 4").waitFor();
+    await tour.getByRole("button", { name: "Lewati tur" }).click();
+    await tour.waitFor({ state: "hidden" });
+    await page.locator(".visitor-header").getByRole("button", { name: "Tur singkat", exact: true }).click();
+    for (let step = 1; step < 4; step++) {
+      await tour.getByLabel(`Langkah ${step} dari 4`).waitFor();
+      await tour.getByRole("button", { name: "Langkah berikutnya" }).click();
+    }
+    await tour.getByLabel("Langkah 4 dari 4").waitFor();
+    await tour.getByRole("button", { name: "Jelajahi demo", exact: true }).click();
+    const welcome = page.getByRole("dialog", { name: "Pilih pengalaman demo" });
+    await welcome.waitFor();
+    await welcome.getByLabel("Paket demo awal").selectOption("Standard");
+    await welcome.getByRole("button", { name: /Admin Sekolah/ }).click();
+    await welcome.waitFor({ state: "hidden" });
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    const current = await (await context.request.get(base + "/api/bootstrap")).json();
+    assert.equal(current.user.role, "admin");
+    assert.equal(current.data.settings[0].plan, "Standard");
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('.nav-item[href="#/visit"]').click();
+    await page.getByRole("heading", { name: /Kenali manfaatnya/ }).waitFor();
+    await page.locator(".visitor-header").getByRole("button", { name: "Tur singkat", exact: true }).click();
+    await tour.getByLabel("Langkah 1 dari 4").waitFor();
+    await tour.getByRole("button", { name: "Lewati tur" }).click();
+    await page.goto(base);
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    assert.equal(await page.locator(".visitor-shell").count(), 0);
+    assert.equal(await page.getByRole("dialog", { name: "Pilih pengalaman demo" }).count(), 0);
+  } finally {
+    await context.request.post(base + "/api/session", { data: { role: "principal", plan: "Pro" } });
+    await context.close();
+  }
+});
+
+test("usage and needs lead to a recoverable private order draft without changing demo access", async () => {
+  const context = await newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+  try {
+    await context.request.post(base + "/api/session", { data: { role: "security", plan: "Standard" } });
+    const page = await context.newPage();
+    let initializeAttempts = 0, saveAttempts = 0;
+    await page.route("**/api/purchase-drafts/session", async (route) => {
+      if (++initializeAttempts === 1) return route.fulfill({
+        status: 503, contentType: "application/json", body: JSON.stringify({ error: "Formulir sedang disiapkan. Coba lagi." }),
+      });
+      await route.continue();
+    });
+    await page.route("**/api/purchase-drafts", async (route) => {
+      if (route.request().method() === "POST" && ++saveAttempts === 1) return route.fulfill({
+        status: 503, contentType: "application/json", body: JSON.stringify({ error: "Draf belum tersimpan. Silakan coba lagi." }),
+      });
+      await route.continue();
+    });
+    await page.goto(base + "/#/usage");
+    await page.getByRole("heading", { name: "Dari data awal sampai hasil yang bisa ditindaklanjuti." }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Urutan penggunaan KabarKelas" }).locator("article").count(), 6);
+    await page.getByRole("button", { name: "Hitung kebutuhan", exact: true }).first().click();
+    await page.getByLabel("Jumlah siswa aktif", { exact: true }).fill("350");
+    await page.getByRole("checkbox", { name: /Butuh EWS dan pemantauan tindak lanjut/ }).check();
+    assert.equal(await page.getByLabel("Paket yang dipilih", { exact: true }).inputValue(), "Pro");
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*7\.000\.000/);
+    assert.match(await page.locator(".buyer-averages").innerText(), /Rp\s*20\.000 per siswa\/tahun/);
+    assert.match(await page.locator(".buyer-upgrade-note").innerText(), /Rp\s*2\.500\.000[\s\S]*Rp\s*595/);
+    await page.screenshot({ path: "test-results/buyer-needs-desktop.png", fullPage: true, animations: "disabled" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "test-results/buyer-needs-mobile.png", fullPage: true, animations: "disabled" });
+    await page.getByRole("button", { name: "Lanjut ke pemesanan" }).click();
+    await page.getByRole("heading", { name: "Tinjau kebutuhan, siapkan pengajuannya." }).waitFor();
+    await page.getByRole("alert").filter({ hasText: "Formulir sedang disiapkan" }).waitFor();
+    const save = page.getByRole("button", { name: "Simpan draf pemesanan", exact: true });
+    assert.equal(await save.isEnabled(), false);
+    await page.getByLabel("Nama penanggung jawab", { exact: true }).fill("Rina Pembeli");
+    await page.getByLabel("Nama sekolah atau yayasan", { exact: true }).fill("Sekolah Coba Mandiri");
+    const email = page.getByLabel("Email untuk tindak lanjut", { exact: true });
+    await email.fill("bukan-email");
+    await page.getByLabel("Nomor telepon (opsional)", { exact: true }).fill("081234567890");
+    await page.getByLabel("Catatan kebutuhan (opsional)", { exact: true }).fill("Ingin meninjau EWS untuk 350 siswa.");
+    await page.getByRole("button", { name: "Coba siapkan formulir lagi" }).click();
+    await page.getByRole("alert").filter({ hasText: "Formulir sedang disiapkan" }).waitFor({ state: "hidden" });
+    assert.equal(await save.isEnabled(), false);
+    assert.equal(saveAttempts, 0);
+    await page.getByRole("checkbox", { name: /Saya setuju informasi ini disimpan sebagai draf permintaan pemesanan/ }).check();
+    await save.click();
+    assert.equal(await email.evaluate((input) => input.validity.valid), false);
+    assert.equal(saveAttempts, 0);
+    await email.fill("rina.pembeli@example.test");
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "test-results/buyer-order-mobile.png", fullPage: true, animations: "disabled" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({ path: "test-results/buyer-order-desktop.png", fullPage: true, animations: "disabled" });
+    await save.click();
+    await page.getByRole("alert").filter({ hasText: "Draf belum tersimpan" }).waitFor();
+    assert.equal(await email.inputValue(), "rina.pembeli@example.test");
+    assert.equal(await page.getByLabel("Nama penanggung jawab", { exact: true }).inputValue(), "Rina Pembeli");
+    await save.click();
+    await page.getByRole("heading", { name: "Draf tersimpan; belum dikirim ke tim KabarKelas.", exact: true }).waitFor();
+    assert.equal(saveAttempts, 2);
+    const reference = await page.locator(".buyer-saved p strong").innerText();
+    assert.match(reference, /^KK-\d{8}-[A-F0-9]{8}$/);
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*7\.000\.000/);
+    assert.match(await page.locator(".buyer-contact-summary").innerText(), /Rina Pembeli[\s\S]*rina\.pembeli@example\.test/);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Unduh ringkasan pemesanan" }).click();
+    const download = await downloadPromise;
+    assert.equal(download.suggestedFilename(), `Draf-KabarKelas-${reference}.txt`);
+    const summary = await readFile(await download.path(), "utf8");
+    assert.match(summary, /Paket: Pro[\s\S]*Jumlah siswa aktif: 350[\s\S]*Rp\s*7\.000\.000/);
+    assert.ok(summary.includes(reference));
+    assert.match(summary, /belum dikirim ke tim KabarKelas/);
+    assert.match(summary, /rina\.pembeli@example\.test/);
+
+    const storedLocally = await page.evaluate(() => Object.values(localStorage).join("\n"));
+    assert.doesNotMatch(storedLocally, /Rina Pembeli|rina\.pembeli@example\.test|081234567890|Ingin meninjau EWS/);
+    await page.reload();
+    await page.getByRole("button", { name: "Buka draf terakhir" }).waitFor();
+    assert.equal(await email.inputValue(), "");
+    await page.getByRole("button", { name: "Buka draf terakhir" }).click();
+    await page.getByRole("heading", { name: "Draf tersimpan; belum dikirim ke tim KabarKelas.", exact: true }).waitFor();
+    assert.equal(await page.locator(".buyer-saved p strong").innerText(), reference);
+    const current = await (await context.request.get(base + "/api/bootstrap")).json();
+    assert.equal(current.user.role, "security");
+    assert.equal(current.data.settings[0].plan, "Standard");
+    assert.equal(current.data.grades.length, 0);
+    await page.locator(".visitor-header").getByRole("button", { name: "Jelajahi demo", exact: true }).click();
+    await page.getByText("Sedang mencoba Standard", { exact: true }).first().waitFor();
+    assert.equal(await page.locator('.nav-item[href="#/visit"], .nav-item[href="#/ews"]').count(), 0);
+    await page.getByRole("button", { name: /Pusat bantuan/ }).click();
+    await page.getByRole("dialog", { name: "Panduan sesuai peranmu" }).getByRole("button", { name: "Tur situs, hitung kebutuhan & pemesanan" }).click();
+    await page.getByRole("heading", { name: /Kenali manfaatnya/ }).waitFor();
+  } finally {
+    await context.request.post(base + "/api/session", { data: { role: "principal", plan: "Pro" } });
+    await context.close();
+  }
+});
+
+test("exploring while a new buyer session is pending waits before opening the school workspace", async () => {
+  const context = await browser.newContext();
+  let releaseSession;
+  const readyToRelease = new Promise((resolve) => { releaseSession = resolve; });
+  let sessionStarted;
+  const sessionRequest = new Promise((resolve) => { sessionStarted = resolve; });
+  try {
+    const page = await context.newPage();
+    const businessRequests = [];
+    page.on("request", (request) => {
+      if (/\/api\/(bootstrap|session)$/.test(request.url())) businessRequests.push(request.url());
+    });
+    await page.route("**/api/purchase-drafts/session", async (route) => {
+      sessionStarted();
+      await readyToRelease;
+      await route.continue();
+    });
+    await page.goto(base + "/#/order");
+    await sessionRequest;
+    await page.getByText("Menyiapkan formulir pemesanan…", { exact: true }).waitFor();
+    await page.locator(".visitor-header").getByRole("button", { name: "Jelajahi demo", exact: true }).click();
+    await page.getByText("Menyiapkan ruang tumbuh bersama…", { exact: true }).waitFor();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.deepEqual(businessRequests, []);
+    releaseSession();
+    const welcome = page.getByRole("dialog", { name: "Pilih pengalaman demo" });
+    await welcome.waitFor();
+    assert.ok(businessRequests.some((url) => url.endsWith("/api/bootstrap")));
+    await welcome.getByRole("button", { name: "Jelajahi tanpa panduan" }).click();
+    await welcome.waitFor({ state: "hidden" });
+    await page.locator("main h1").waitFor();
+    const buyerCookie = (await context.cookies(base)).find((cookie) => cookie.name === "kk_buyer");
+    assert.ok(buyerCookie);
+    assert.equal(buyerCookie.httpOnly, true);
+  } finally {
+    releaseSession();
+    await context.close();
+  }
+});
+
+test("needs validates package fit and calculates Yayasan from actual pupils in each unit", async () => {
+  const context = await newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const page = await context.newPage();
+    await page.goto(base + "/#/needs");
+    const next = page.getByRole("button", { name: "Lanjut ke pemesanan" });
+    await page.getByRole("checkbox", { name: /Butuh EWS dan pemantauan tindak lanjut/ }).check();
+    await page.getByLabel("Paket yang dipilih", { exact: true }).selectOption("Standard");
+    await page.getByRole("alert").filter({ hasText: "Standard tidak menyertakan EWS" }).waitFor();
+    assert.equal(await next.isEnabled(), false);
+    await page.getByRole("checkbox", { name: /Butuh EWS dan pemantauan tindak lanjut/ }).uncheck();
+    const pupils = page.getByLabel("Jumlah siswa aktif", { exact: true });
+    await pupils.fill("0");
+    assert.equal(await next.isEnabled(), false);
+    assert.equal(await pupils.getAttribute("aria-invalid"), "true");
+    await page.getByRole("alert").filter({ hasText: "bilangan bulat positif" }).waitFor();
+    await pupils.fill("350");
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*4\.500\.000/);
+    assert.match(await page.locator(".buyer-averages").innerText(), /Rp\s*12\.857 per siswa\/tahun/);
+    await page.getByRole("checkbox", { name: /Kelola lebih dari satu sekolah/ }).check();
+    assert.equal(await page.getByLabel("Paket yang dipilih", { exact: true }).inputValue(), "Yayasan");
+    for (let unit = 1; unit <= 3; unit++)
+      await page.getByLabel(`Jumlah siswa Unit ${unit}`, { exact: true }).fill("500");
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*30\.000\.000/);
+    assert.match(await page.locator(".buyer-quote-count").innerText(), /1\.500 siswa aktif di 3 unit/);
+    assert.match(await page.locator(".buyer-unit-breakdown").innerText(), /25\.500\.000[\s\S]*4\.500\.000/);
+    assert.match(await page.locator(".buyer-averages").innerText(), /Rp\s*20\.000 per siswa\/tahun/);
+    await page.getByText("Lihat rincian 3 unit", { exact: true }).click();
+    assert.equal(await page.locator(".buyer-unit-details tbody tr").count(), 3);
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "test-results/buyer-yayasan-mobile.png", fullPage: true, animations: "disabled" });
+    await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).fill("350");
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*28\.500\.000/);
+    await page.getByRole("button", { name: "Hapus Unit 3", exact: true }).click();
+    assert.equal(await page.getByRole("button", { name: "Hapus Unit 1", exact: true }).isEnabled(), false);
+    assert.equal(await page.getByRole("button", { name: "Hapus Unit 2", exact: true }).isEnabled(), false);
+    await page.getByRole("button", { name: "Tambah unit", exact: true }).click();
+    assert.equal(await page.getByLabel("Jumlah siswa Unit 3", { exact: true }).inputValue(), "500");
+    await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).fill("2001");
+    assert.equal(await page.locator(".buyer-annual strong").innerText(), "Penawaran khusus");
+    assert.equal(await page.locator(".buyer-averages").count(), 0);
+    assert.equal(await next.isEnabled(), true);
+    await next.click();
+    await page.getByRole("heading", { name: "Tinjau kebutuhan, siapkan pengajuannya." }).waitFor();
+    assert.equal(await page.locator(".buyer-annual strong").innerText(), "Penawaran khusus");
+    assert.match(await page.locator(".buyer-custom-note").innerText(), /total biaya belum ditentukan/);
+    await page.getByRole("button", { name: "Ubah kebutuhan dan paket" }).click();
+    assert.equal(await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).inputValue(), "2001");
+    await page.reload();
+    assert.equal(await page.getByLabel("Jumlah siswa Unit 1", { exact: true }).inputValue(), "2001");
+  } finally {
+    await context.close();
+  }
+});
+
+test("the existing pricing calculator carries Pro and the actual pupil count into ordering", async () => {
+  const context = await newContext({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await context.request.post(base + "/api/session", { data: { role: "admin", plan: "Standard" } });
+    const page = await context.newPage();
+    await page.goto(base + "/#/packages");
+    await page.getByRole("heading", { name: "Kalkulator sekolah" }).waitFor();
+    await page.getByLabel("Jumlah siswa aktif di sekolah", { exact: true }).fill("350");
+    await page.getByRole("button", { name: "Siapkan pemesanan Pro", exact: true }).click();
+    await page.getByRole("heading", { name: "Tinjau kebutuhan, siapkan pengajuannya." }).waitFor();
+    assert.equal(new URL(page.url()).hash, "#/order");
+    assert.equal(await page.locator(".buyer-kicker").filter({ hasText: /^PAKET PRO$/ }).count(), 1);
+    assert.match(await page.locator(".buyer-quote-count").innerText(), /350 siswa aktif di satu sekolah/);
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*7\.000\.000/);
+    const current = await (await context.request.get(base + "/api/bootstrap")).json();
+    assert.equal(current.user.role, "admin");
+    assert.equal(current.data.settings[0].plan, "Standard");
+    await page.reload();
+    assert.match(await page.locator(".buyer-quote-count").innerText(), /350 siswa aktif di satu sekolah/);
+    assert.match(await page.locator(".buyer-annual strong").innerText(), /Rp\s*7\.000\.000/);
+    await page.getByRole("button", { name: "Ubah kebutuhan dan paket" }).click();
+    assert.equal(await page.getByLabel("Paket yang dipilih", { exact: true }).inputValue(), "Pro");
+    assert.equal(await page.getByLabel("Jumlah siswa aktif", { exact: true }).inputValue(), "350");
   } finally {
     await context.request.post(base + "/api/session", { data: { role: "principal", plan: "Pro" } });
     await context.close();

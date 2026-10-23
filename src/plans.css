@@ -29,6 +29,7 @@
 .pricing-unit { min-width: 0; background: #f8fbf9; padding: 17px; border: 1px solid #dce8e2; border-radius: 9px; }
 .pricing-unit > .btn { margin-top: 10px; padding-left: 0; }
 .pricing-plan-actions { margin: 18px 0; }
+.pricing-order-link { margin-top: 10px; white-space: normal; }
 .pricing-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .pricing-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; }
 .pricing-table th, .pricing-table td { padding: 16px 19px; white-space: nowrap; border-bottom: 1px solid #e4ece7; }

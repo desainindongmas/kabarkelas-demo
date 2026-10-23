@@ -10,7 +10,8 @@ Situs produksi: https://kabarkelas-demo.netlify.app/.
 
 Sebelum publish dari environment yang pernah dipakai sebelumnya, sinkronkan checkout dengan `main` di GitHub. Setelah push, cocokkan SHA commit pada deploy Netlify dengan commit terbaru di GitHub; referensi lokal yang belum di-fetch dapat masih menunjuk versi lama. Push berhasil belum membuktikan build dan publikasi di Netlify selesai.
 
-- Buka situs HTTPS di browser baru: pilih paket dan peran pada pengenalan, lalu pastikan status paket tetap tampil setelah reload.
+- Buka situs HTTPS di browser baru: halaman pengenalan menawarkan tur singkat, jelajah demo, alur penggunaan, hitung kebutuhan dan pemesanan. Tur dapat dilewati atau diulang. Pilih jelajah untuk memilih paket dan peran, lalu pastikan status paket tetap tampil setelah reload.
+- Hitung kebutuhan tanpa membuka ruang demo: 350 siswa dengan EWS merekomendasikan Pro Rp7.000.000/tahun; Yayasan tiga unit berisi 500 siswa/unit Rp30.000.000/tahun. Lanjutkan pemesanan, isi kontak dan persetujuan, simpan draf, unduh ringkasan, lalu reload untuk membuka draf terakhir. Browser lain tidak boleh membaca draf tersebut. Draf belum dikirim kepada tim KabarKelas; tujuan penjualan belum dikonfigurasi.
 - Pada Standard, pekerjaan harian, rapor, SPP manual, QR, ekspor dan backup dasar tetap tersedia sesuai role; EWS, indikator/tren risiko dan alur pendampingan risiko tidak tampil maupun diterima dari API. Pada Pro/Yayasan, coba EWS memakai role akademik yang berwenang.
 - Admin melihat dashboard administrasi tanpa menu EWS/nilai siswa. Guru + wali kelas memiliki akses tambahan khusus X IPA 1. Security hanya memiliki dashboard, pemindai QR, riwayat dan konfirmasi gerbang.
 - Simpan biodata sebagai Admin atau nilai sebagai Guru, lalu reload: perubahan tetap tersedia untuk browser itu.
@@ -22,7 +23,9 @@ Sebelum publish dari environment yang pernah dipakai sebelumnya, sinkronkan chec
 
 ## API dan penyimpanan
 
-`app.mjs` melayani server lokal dan function Netlify yang sama. Entry point menggunakan Web Request API v2 untuk mempertahankan konfigurasi Blobs dari platform, termasuk `uncachedEdgeURL`. Adapter mempertahankan kedua cookie sesi/ruang pengunjung. Setiap eksekusi memulihkan database SQLite sementara dari snapshot Blobs, dan menyimpan perubahan menggunakan ETag compare-and-set. Kesalahan konflik 409 meminta pengguna memuat ulang sebelum mengulangi perubahan.
+`app.mjs` melayani server lokal dan function Netlify yang sama. Entry point menggunakan Web Request API v2 untuk mempertahankan konfigurasi Blobs dari platform, termasuk `uncachedEdgeURL`. Adapter mempertahankan seluruh cookie sesi, ruang pengunjung dan pemilik draf. Setiap eksekusi memulihkan database SQLite sementara dari snapshot Blobs, dan menyimpan perubahan menggunakan ETag compare-and-set. Kesalahan konflik 409 meminta pengguna memuat ulang sebelum mengulangi perubahan.
+
+`purchase-api.mjs` menyediakan `/api/purchase-drafts/session`, POST `/api/purchase-drafts`, dan GET `/api/purchase-drafts/:id`. Cookie HttpOnly `kk_buyer` membatasi akses pada draf milik pengunjung; tabel draf terpisah dari data sekolah dan backup akademik. API menghitung harga kanonis dari `shared/pricing.mjs`, memvalidasi kontak/persetujuan dan kesesuaian paket, serta memakai identitas permintaan untuk mencegah duplikasi saat penyimpanan dicoba ulang. Halaman publik menunda bootstrap demo sampai pengunjung memilih jelajah agar pembuatan ruang pertama tidak berlomba dengan sesi formulir. Menyimpan draf tidak membuat sesi akademik, mengirim pesan, memproses pembayaran, atau mengaktifkan paket.
 
 Migrasi menambahkan data operasional pada ruang demo versi sebelumnya tanpa mereset biodata/nilai yang telah diubah. Migrasi product-v3 menambahkan arahan unit, target, kebutuhan, riwayat contoh semester, pengaturan paket dan kejadian gerbang. Role wali kelas lama dinormalisasi menjadi Guru + wali kelas, dan super admin lama menjadi Yayasan. Data chat/integrasi lama tidak lagi diekspos maupun dipakai. Backup baru hanya memasukkan koleksi yang masih didukung.
 

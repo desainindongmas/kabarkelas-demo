@@ -81,6 +81,15 @@ export function Pricing() {
       setBusy(false);
     }
   };
+  const order = (plan: string) => {
+    window.dispatchEvent(new CustomEvent("kk:buyer-needs", { detail: {
+      plan,
+      students: school?.students || 500,
+      units: plan === "Yayasan" ? units.map(Number) : [school?.students || 500],
+      wantsEws: plan !== "Standard",
+    } }));
+    go("order");
+  };
 
   return (
     <>
@@ -146,6 +155,7 @@ export function Pricing() {
                 {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={16} />{feature}</li>)}
               </ul>
               {canChange ? (
+                <>
                 <Button
                   disabled={busy || active === plan.name}
                   variant={index === 1 ? "primary" : "secondary"}
@@ -153,6 +163,10 @@ export function Pricing() {
                 >
                   {active === plan.name ? "Sedang dicoba" : `Coba ${plan.name} di demo`}
                 </Button>
+                <Button variant="ghost" className="pricing-order-link" disabled={busy || (isFoundation ? !foundation : !school)} onClick={() => order(plan.name)}>
+                  {customQuote ? "Minta penawaran khusus" : `Siapkan pemesanan ${plan.name}`}
+                </Button>
+                </>
               ) : (
                 <p className="pricing-note">Pilihan paket tersedia untuk Kepala Sekolah, Admin dan Yayasan.</p>
               )}

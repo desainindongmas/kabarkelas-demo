@@ -1,0 +1,102 @@
+.buyer-flow { width: min(1180px, 100%); margin: 0 auto; color: #244c46; }
+.buyer-flow * { box-sizing: border-box; }
+.buyer-page-intro { max-width: 760px; margin-bottom: 32px; }
+.buyer-kicker { display: block; font-size: 10px; font-weight: 800; letter-spacing: .13em; color: #318770; }
+.buyer-page-intro h1, .buyer-saved h1 { font-size: clamp(27px, 3vw, 38px); line-height: 1.35; letter-spacing: -.04em; margin: 13px 0 16px; color: #173f42; }
+.buyer-page-intro > p, .buyer-saved > p { font-size: 14px; line-height: 1.9; color: #627871; }
+.buyer-calculator-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 27px; align-items: start; }
+.buyer-calculator-grid > * { min-width: 0; }
+.buyer-card, .buyer-quote { min-width: 0; background: #fff; border: 1px solid #dce8e2; border-radius: 16px; padding: 28px; }
+.buyer-card h2, .buyer-quote h2 { color: #214b43; font-size: 21px; line-height: 1.5; margin: 0 0 10px; letter-spacing: -.02em; }
+.buyer-muted { font-size: 11px; line-height: 1.9; color: #72837d; }
+.buyer-base-need { display: flex; align-items: flex-start; gap: 12px; padding: 20px 0; border-bottom: 1px solid #e8eeea; }
+.buyer-base-need > svg { color: #17876e; flex-shrink: 0; margin-top: 3px; }
+.buyer-base-need strong, .buyer-choice strong { display: block; font-size: 13px; color: #284c44; line-height: 1.7; }
+.buyer-base-need span, .buyer-choice small { display: block; font-size: 11px; color: #73847c; line-height: 1.9; margin-top: 4px; }
+.buyer-choice { display: flex; align-items: flex-start; gap: 12px; padding: 17px 0; cursor: pointer; font-size: 12px; line-height: 1.9; }
+.buyer-choice input { width: 17px; height: 17px; margin: 3px 0 0; accent-color: #078c73; flex-shrink: 0; }
+.buyer-recommendation { display: flex; align-items: flex-start; gap: 11px; padding: 15px; border-radius: 9px; background: #eef7f2; color: #3e6e5c; font-size: 12px; line-height: 1.9; margin: 8px 0 23px; }
+.buyer-recommendation svg { flex-shrink: 0; margin-top: 4px; }
+.buyer-field { display: grid; gap: 9px; font-size: 12px; font-weight: 600; color: #355d51; margin: 20px 0; }
+.buyer-field input, .buyer-field select, .buyer-field textarea { width: 100%; min-width: 0; border: 1px solid #cbdcd3; border-radius: 8px; padding: 12px 13px; background: white; color: #21473d; font: inherit; font-size: 14px; }
+.buyer-field input:focus, .buyer-field select:focus, .buyer-field textarea:focus { outline: 2px solid #059d85; outline-offset: 3px; }
+.buyer-field input[aria-invalid="true"] { border-color: #c7684f; }
+.buyer-field textarea { resize: vertical; }
+.buyer-unit-fields { padding: 0; margin-top: 25px; border: 0; min-width: 0; }
+.buyer-unit-fields legend { font-size: 14px; font-weight: 700; color: #335b4e; margin-bottom: 8px; }
+.buyer-unit-input { display: flex; align-items: center; gap: 12px; }
+.buyer-unit-input .buyer-field { flex: 1; min-width: 0; margin: 13px 0; }
+.buyer-unit-input > .btn { margin-top: 23px; }
+.buyer-unit-fields > .btn { margin-top: 12px; }
+.buyer-price-terms { font-size: 11px; line-height: 1.95; color: #72837b; background: #f7faf8; border-radius: 9px; padding: 18px; margin-top: 25px; }
+.buyer-price-terms strong { color: #547663; }
+.buyer-price-terms p { margin-top: 7px; }
+.buyer-quote { background: linear-gradient(145deg, #f1f9f4, #fff); border-color: #bfdcce; }
+.buyer-quote-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.buyer-quote-pill { color: #678374; border: 1px solid #ccdfd1; border-radius: 20px; padding: 5px 9px; font-size: 10px; white-space: nowrap; }
+.buyer-quote h2 { font-size: 24px; }
+.buyer-quote-count { font-size: 12px; color: #72877a; margin-top: 14px; }
+.buyer-annual { margin: 27px 0 12px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; color: #174d40; }
+.buyer-annual strong { font-size: clamp(29px, 3.5vw, 40px); font-weight: 800; letter-spacing: -.045em; line-height: 1.4; }
+.buyer-annual > span { font-size: 13px; color: #6b8374; }
+.buyer-averages { display: grid; gap: 8px; color: #4c7562; font-size: 13px; line-height: 1.9; }
+.buyer-averages small { color: #789182; font-size: 10px; }
+.buyer-inclusions { list-style: none; margin: 24px 0; padding: 20px 0; display: grid; gap: 13px; border-top: 1px solid #dce8df; border-bottom: 1px solid #dce8df; }
+.buyer-inclusions li { display: flex; align-items: flex-start; gap: 9px; font-size: 11px; line-height: 1.9; color: #4c6e5d; }
+.buyer-inclusions svg { color: #168971; margin-top: 3px; flex-shrink: 0; }
+.buyer-unit-breakdown { display: grid; gap: 12px; margin: 24px 0 17px; font-size: 11px; color: #668271; }
+.buyer-unit-breakdown > div { display: flex; justify-content: space-between; gap: 15px; }
+.buyer-unit-breakdown strong { text-align: right; color: #3a6651; }
+.buyer-unit-details { font-size: 11px; color: #3f6f59; margin-top: 17px; }
+.buyer-unit-details summary { cursor: pointer; padding: 8px 0; }
+.buyer-table-wrap { max-width: 100%; overflow-x: auto; margin: 10px 0; }
+.buyer-table-wrap table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10px; }
+.buyer-table-wrap th, .buyer-table-wrap td { padding: 11px 13px; white-space: nowrap; border-bottom: 1px solid #d9e6dc; }
+.buyer-table-wrap thead { background: #e9f4eb; }
+.buyer-upgrade-note { padding: 22px 5px; font-size: 12px; line-height: 1.9; color: #577464; }
+.buyer-upgrade-note strong { color: #315f4a; }
+.buyer-upgrade-note p { margin-top: 7px; font-size: 11px; }
+.buyer-continue, .buyer-submit { width: 100%; justify-content: center; margin-top: 17px; }
+.buyer-center-note { text-align: center; margin: 13px 10px 0; }
+.buyer-error { color: #944f39; font-size: 12px; line-height: 1.9; background: #fff4ea; padding: 13px 15px; border-radius: 8px; margin: 14px 0; }
+.buyer-custom-note { color: #8b694c; background: #fff8eb; padding: 16px; border-radius: 9px; font-size: 11px; line-height: 1.9; margin-top: 18px; }
+.buyer-awaiting { padding: 45px 30px; text-align: center; color: #71907c; }
+.buyer-awaiting h2 { margin-top: 20px; }
+.buyer-awaiting p { font-size: 12px; line-height: 1.9; }
+.buyer-order-form > h2 { margin-bottom: 10px; }
+.buyer-preparing { display: flex; align-items: center; gap: 9px; font-size: 11px; color: #739080; margin: 17px 0; }
+.buyer-recovery { background: #f1f7f2; padding: 17px; border-radius: 9px; margin: 20px 0; }
+.buyer-recovery p { font-size: 11px; line-height: 1.9; color: #5f7b67; margin-bottom: 12px; }
+.buyer-error > .btn { margin-top: 13px; }
+.buyer-edit-needs { margin-top: 20px; }
+.buyer-consent { padding-bottom: 8px; }
+.buyer-consent > span { font-size: 11px; color: #577262; }
+.buyer-privacy { display: flex; gap: 10px; align-items: flex-start; font-size: 10px; line-height: 1.95; color: #75897b; margin: 18px 0; }
+.buyer-privacy svg { flex-shrink: 0; color: #5d9077; margin-top: 3px; }
+.buyer-saved { background: #eff8f1; border: 1px solid #cce4d2; border-radius: 16px; padding: 35px; margin-bottom: 28px; }
+.buyer-saved-icon { display: inline-flex; width: 65px; height: 65px; align-items: center; justify-content: center; border-radius: 16px; background: #d9eee0; color: #20845e; margin-bottom: 23px; }
+.buyer-saved h1 { max-width: 800px; font-size: 31px; }
+.buyer-saved p { max-width: 760px; }
+.buyer-saved > .buyer-draft-difference { font-size: 12px; color: #577b61; padding: 15px; border: 1px solid #d0e3d4; border-radius: 9px; margin-top: 18px; }
+.buyer-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 25px; }
+.buyer-contact-summary { font-size: 12px; line-height: 1.9; margin: 20px 0; }
+.buyer-contact-summary > div { border-bottom: 1px solid #e5ede7; padding: 14px 0; }
+.buyer-contact-summary dt { font-size: 10px; color: #829185; }
+.buyer-contact-summary dd { margin: 4px 0 0; overflow-wrap: anywhere; color: #486954; }
+@media (max-width: 850px) {
+  .buyer-calculator-grid { grid-template-columns: minmax(0, 1fr); gap: 23px; }
+  .buyer-annual strong { font-size: 36px; }
+}
+@media (max-width: 600px) {
+  .buyer-page-intro { margin-bottom: 25px; }
+  .buyer-page-intro > p, .buyer-saved > p { font-size: 12px; }
+  .buyer-card, .buyer-quote { padding: 22px 19px; border-radius: 12px; }
+  .buyer-card h2 { font-size: 19px; }
+  .buyer-quote h2 { font-size: 22px; }
+  .buyer-annual strong { font-size: 31px; }
+  .buyer-saved { padding: 25px 20px; }
+  .buyer-saved h1 { font-size: 25px; }
+  .buyer-actions { flex-direction: column; }
+  .buyer-actions .btn { justify-content: center; white-space: normal; }
+  .buyer-field { font-size: 11px; }
+}

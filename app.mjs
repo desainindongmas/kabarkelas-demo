@@ -6,6 +6,7 @@ import path from "node:path";
 import { seed } from "./seed.mjs";
 import { seedProduct } from "./seed-product.mjs";
 import { installProductAPI } from "./product-api.mjs";
+import { installPurchaseAPI } from "./purchase-api.mjs";
 import { seedOperations } from "./seed-operations.mjs";
 import {
   roleNames,
@@ -631,6 +632,7 @@ export function createApplication({ databasePath, secureCookies = false }) {
         .json({ error: "Terlalu banyak permintaan. Coba sebentar lagi." });
     next();
   });
+  installPurchaseAPI({ app, db, secureCookies });
   app.post("/api/session", (req, res) => {
     const {
       role = "principal",

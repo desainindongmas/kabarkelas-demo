@@ -2,6 +2,8 @@ import { Board, UnitWork, Packages, ProAnalysis, Workflow } from "./Product";
 import { GateDashboard, GateScan, GateHistory, GateIncidents } from "./Gate";
 import { DemoWelcome, DemoTour } from "./Experience";
 import { FoundationPlanRequired } from "./PlanExperience";
+import { VisitorJourney, type VisitorPage } from "./VisitorJourney";
+import { NeedsCalculator, OrderRequest, waitForBuyerSession, type BuyerNeeds } from "./BuyerFlow";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -184,6 +186,7 @@ const navigation = [
       { id: "unit-needs", label: "Kebutuhan unit", icon: Wallet },
       { id: "meeting", label: "Laporan rapat", icon: FileCheck2 },
       { id: "packages", label: "Paket & manfaat", icon: Building2 },
+      { id: "visit", label: "Tur & pemesanan", icon: HelpCircle },
     ],
   },
 ];
@@ -200,10 +203,24 @@ const descriptions: Record<string, string> = {
   security: "Verifikasi QR, catatan gerbang dan laporan kejadian",
 };
 function parseRoute() {
+  const firstPage = localStorage.getItem("kk-welcome-v3") === "seen" || localStorage.getItem("kk-site-intro-v1") === "seen" ? "dashboard" : "visit";
   const [page = "dashboard", id = ""] = (
-    location.hash.replace(/^#\/?/, "") || "dashboard"
+    location.hash.replace(/^#\/?/, "") || firstPage
   ).split("/");
   return { page, id };
+}
+const visitorRoutes: Record<string, VisitorPage> = { visit: "start", usage: "flow", needs: "needs", order: "order" };
+const visitorHashes: Record<VisitorPage, string> = { start: "visit", flow: "usage", needs: "needs", order: "order" };
+const defaultNeeds: BuyerNeeds = { plan: "Standard", students: 500, units: [500, 500, 500], wantsEws: false };
+function validNeeds(value: unknown): value is BuyerNeeds {
+  if (!value || typeof value !== "object") return false;
+  const v = value as BuyerNeeds;
+  return ["Standard", "Pro", "Yayasan"].includes(v.plan) && Number.isSafeInteger(v.students) && v.students > 0 &&
+    Array.isArray(v.units) && v.units.length >= (v.plan === "Yayasan" ? 2 : 1) && v.units.length <= 100 && v.units.every(n => Number.isSafeInteger(n) && n > 0) && typeof v.wantsEws === "boolean";
+}
+function restoredNeeds(): BuyerNeeds {
+  try { const saved = JSON.parse(localStorage.getItem("kk-buyer-needs-v1") || "null"); return validNeeds(saved) ? saved : defaultNeeds; }
+  catch { return defaultNeeds; }
 }
 export default function App() {
   const [state, setState] = useState<{
@@ -214,6 +231,7 @@ export default function App() {
       overview: Row[];
     } | null>(null),
     [route, setRoute] = useState(parseRoute),
+    [buyerNeeds, setBuyerNeeds] = useState<BuyerNeeds>(restoredNeeds),
     [welcome, setWelcome] = useState(
       () => localStorage.getItem("kk-welcome-v3") !== "seen",
     ),
@@ -234,6 +252,17 @@ export default function App() {
     [],
   );
   useEffect(() => {
+    localStorage.setItem("kk-buyer-needs-v1", JSON.stringify(buyerNeeds));
+  }, [buyerNeeds]);
+  useEffect(() => {
+    const choose = (event: Event) => {
+      const value = (event as CustomEvent).detail;
+      if (validNeeds(value)) setBuyerNeeds(value);
+    };
+    window.addEventListener("kk:buyer-needs", choose);
+    return () => window.removeEventListener("kk:buyer-needs", choose);
+  }, []);
+  useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(null), 4500);
       return () => clearTimeout(timer);
@@ -244,9 +273,13 @@ export default function App() {
     [],
   );
   useEffect(() => {
+    if (visitorRoutes[route.page] || state) return;
     let active = true;
+    setError("");
     (async () => {
       try {
+        await waitForBuyerSession();
+        if (!active) return;
         let data;
         try {
           data = await api("/api/bootstrap");
@@ -264,7 +297,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [!!visitorRoutes[route.page], !!state]);
   useEffect(() => {
     const update = () => {
       setRoute(parseRoute());
@@ -327,6 +360,18 @@ export default function App() {
     await reload();
     toast("Data berhasil dihapus");
   };
+  const visitorPage = visitorRoutes[route.page];
+  if (visitorPage)
+    return <VisitorJourney page={visitorPage}
+      onNavigate={page => go(visitorHashes[page])}
+      onExplore={() => {
+        localStorage.setItem("kk-site-intro-v1", "seen");
+        setWelcome(localStorage.getItem("kk-welcome-v3") !== "seen");
+        go("dashboard");
+      }}>
+      {visitorPage === "needs" && <NeedsCalculator value={buyerNeeds} onChange={setBuyerNeeds} onContinue={() => go("order")} />}
+      {visitorPage === "order" && <OrderRequest needs={buyerNeeds} onBack={() => go("needs")} />}
+    </VisitorJourney>;
   if (!state)
     return (
       <div className="app-loading">
@@ -344,7 +389,7 @@ export default function App() {
     .map((g) => ({
       ...g,
       items: g.items
-        .filter((i) => canAccessPage(user, i.id, data.settings[0]))
+        .filter((i) => i.id === "visit" ? ["principal", "admin", "foundation"].includes(user.role) : canAccessPage(user, i.id, data.settings[0]))
         .map((i) => ({
           ...i,
           label:
@@ -944,6 +989,9 @@ export default function App() {
                 }}
               >
                 Jelajahi role lain
+              </Button>
+              <Button variant="secondary" onClick={() => { setHelp(false); go("visit"); }}>
+                Tur situs, hitung kebutuhan & pemesanan
               </Button>
             </div>
           </Modal>
